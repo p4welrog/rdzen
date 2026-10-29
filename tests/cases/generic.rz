@@ -1,10 +1,11 @@
 fn first<T>(xs: Array<T>) -> Option<T>
-    ensures match result {
-        Some(v) => xs.len > 0 && v == xs[0],
-        None => xs.len == 0,
-    }
+    ensures match result { Some(v) => xs.len > 0 && v == xs[0], None => xs.len == 0 }
 {
-    if xs.len == 0 { None } else { Some(xs[0]) }
+    if xs.len == 0 {
+        None
+    } else {
+        Some(xs[0])
+    }
 }
 
 fn uses_first() -> Int

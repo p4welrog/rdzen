@@ -9,5 +9,8 @@ spec fn bad(t: Tree) -> Bool
 fn loop_(t: Tree) -> Int
     decreases t
 {
-    match t { Leaf => 0, Node(l, r) => loop_(Node(r, l)) }
+    match t {
+        Leaf => 0,
+        Node(l, r) => loop_(Node(r, l)),
+    }
 }

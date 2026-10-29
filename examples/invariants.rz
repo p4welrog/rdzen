@@ -99,10 +99,7 @@ fn sum_pos(l: PosList) -> Int
 {
     match l {
         PNil => 0,
-        PCons(h, t) => match checked_add(h, sum_pos(t)) {
-            Some(s) => s,
-            None => int_max,
-        },
+        PCons(h, t) => match checked_add(h, sum_pos(t)) { Some(s) => s, None => int_max },
     }
 }
 
@@ -148,5 +145,9 @@ fn first_two(xs: Array<Int>) -> Option<Int>
 fn at(xs: Array<Int>, i: Nat) -> Option<Int>
     ensures match result { Some(v) => i < xs.len && v == xs[i], None => i >= xs.len }
 {
-    if i < xs.len { Some(xs[i]) } else { None }
+    if i < xs.len {
+        Some(xs[i])
+    } else {
+        None
+    }
 }

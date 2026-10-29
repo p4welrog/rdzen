@@ -1,6 +1,7 @@
 // expect: ok
 fn index_of(xs: Array<Int>, v: Int) -> Int
-    ensures (result == -1 && !contains(xs, v)) || (0 <= result && result < xs.len && xs[result] == v)
+    ensures (result == -1 && !contains(xs, v)) ||
+        (0 <= result && result < xs.len && xs[result] == v)
     examples {
         index_of([4, 5, 6], 6) == 2
         index_of([4, 5, 6], 7) == -1

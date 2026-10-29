@@ -65,8 +65,11 @@ def _unescape(src, j, quote, line, col):
     return "".join(out), j + 1
 
 
-def lex(src: str) -> list:
+def lex(src: str, comments: list | None = None) -> list:
+    """Tokeny; jeśli podano `comments`, dopisuje do niej komentarze jako
+    (wiersz, kolumna, tekst, czy_sam_w_wierszu)."""
     toks = []
+    line_has_tok = False
     i, line, col = 0, 1, 1
     n = len(src)
 
@@ -79,15 +82,21 @@ def lex(src: str) -> list:
             if last_kind() in SEMI_AFTER:
                 toks.append(Tok(";", ";", None, line, col, implicit=True))
             i += 1; line += 1; col = 1
+            line_has_tok = False
             continue
         if c in " \t\r":
             i += 1; col += 1
             continue
         if src.startswith("//", i):
-            while i < n and src[i] != "\n":
-                i += 1; col += 1
+            j = i
+            while j < n and src[j] != "\n":
+                j += 1
+            if comments is not None:
+                comments.append((line, col, src[i:j].rstrip(), not line_has_tok))
+            col += j - i; i = j
             continue
         start_col = col
+        line_has_tok = True
         if c == "b" and i + 1 < n and src[i + 1] == "'":
             j = i + 2
             chars, j = _unescape(src, j, "'", line, start_col)

@@ -1,6 +1,7 @@
 // expect: E4051
 data Range { Range(lo: Int, hi: Int) } where self.lo <= self.hi
 data P { P(n: Nat) }
+
 data PosList { PNil, PCons(head: Int, tail: PosList) }
     where match self { PNil => true, PCons(h, _) => h > 0 }
 

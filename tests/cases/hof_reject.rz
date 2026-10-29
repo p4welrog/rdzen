@@ -1,14 +1,15 @@
 // expect: E3015, E3016, E2015
 fn loopy(xs: Array<Int>) -> Int {
-    let f = fn(x: Int) => {
-        var s = 0
-        while s < x
-            decreases x - s
+    let f = fn(x: Int) =>
         {
-            s = s + 1
+            var s = 0
+            while s < x
+                decreases x - s
+            {
+                s = s + 1
+            }
+            s
         }
-        s
-    }
     f(3)
 }
 

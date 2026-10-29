@@ -107,8 +107,8 @@ fn upper(s: Str) -> Str {
 fn trim(s: Str) -> Str
     ensures result.len <= s.len
     ensures result.len == 0 || (!is_space(result[0]) && !is_space(result[result.len - 1]))
-    ensures exists a in 0..s.len + 1: a + result.len <= s.len &&
-        (forall k in 0..result.len: result[k] == s[a + k])
+    ensures exists a in 0..s.len + 1:
+        a + result.len <= s.len && forall k in 0..result.len: result[k] == s[a + k]
     examples {
         trim("  ab c \n") == "ab c"
         trim("   ") == ""
@@ -132,7 +132,7 @@ fn trim(s: Str) -> Str
 }
 
 fn greet(name: Str) -> Str
-    ensures result.len == name.len + 9      // „Cześć, ” to 9 bajtów UTF-8
+    ensures result.len == name.len + 9  // „Cześć, ” to 9 bajtów UTF-8
     examples {
         greet("Paweł") == "Cześć, Paweł"
     }

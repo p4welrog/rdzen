@@ -2,5 +2,9 @@
 fn bad(n: Nat) -> Nat
     decreases n
 {
-    if n == 0 { 0 } else { bad(n) }
+    if n == 0 {
+        0
+    } else {
+        bad(n)
+    }
 }

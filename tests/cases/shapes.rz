@@ -1,11 +1,11 @@
-data Shape {
-    Circle(r: Nat),
-    Rect(w: Nat, h: Nat),
-    Square(side: Nat),
-}
+data Shape { Circle(r: Nat), Rect(w: Nat, h: Nat), Square(side: Nat) }
 
 fn area(s: Shape) -> Int
-    requires match s { Circle(r) => r <= 1000, Rect(w, h) => w <= 1000 && h <= 1000, Square(a) => a <= 1000 }
+    requires match s {
+        Circle(r) => r <= 1000,
+        Rect(w, h) => w <= 1000 && h <= 1000,
+        Square(a) => a <= 1000,
+    }
     ensures result >= 0
 {
     match s {

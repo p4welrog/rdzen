@@ -9,5 +9,4 @@ spec fn len(l: List) -> Nat
 lemma fn wrong(l: List)
     ensures len(l) == 0
     decreases l
-{
-}
+{ }

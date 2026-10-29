@@ -11,10 +11,7 @@ fn second_pos(l: PosList) -> Int
 {
     match l {
         PNil => 1,
-        PCons(h, t) => match t {
-            PNil => h,
-            PCons(h2, _) => h2,
-        },
+        PCons(h, t) => match t { PNil => h, PCons(h2, _) => h2 },
     }
 }
 
@@ -29,7 +26,11 @@ fn make(a: Int, b: Int) -> Range
         make(3, 1) == Range(1, 3)
     }
 {
-    if a <= b { Range(a, b) } else { Range(b, a) }
+    if a <= b {
+        Range(a, b)
+    } else {
+        Range(b, a)
+    }
 }
 
 fn unwrap_or_zero(o: Opt2) -> Nat {

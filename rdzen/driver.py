@@ -105,10 +105,44 @@ class Result:
         self.checker = None
 
 
-def compile_source(src: str, run_examples=True, rlimit=1_000_000) -> Result:
+def canon_diag(src: str):
+    """E0100: program różny od swojej postaci kanonicznej fmt(parse(P)) (§2.5)."""
+    from .fmt import check_format, NotFlat
+    try:
+        out, ok = check_format(src)
+    except (CompileError, NotFlat, RecursionError):
+        return None
+    if not ok or out == src:
+        return None                 # formatter nie gwarantuje zachowania drzewa — bez E0100
+    a, b = src.split("\n"), out.split("\n")
+    k = next((i for i in range(max(len(a), len(b)))
+              if (a[i] if i < len(a) else None) != (b[i] if i < len(b) else None)), 0)
+    line = k + 1
+    got = a[k] if k < len(a) else ""
+    want = b[k] if k < len(b) else ""
+    return Diagnostic("E0100", "error", Span(line, 1, line, max(2, len(got) + 1)),
+                      "program nie jest w postaci kanonicznej", ["2.5"],
+                      expected=want.strip() or "‹pusty wiersz›", found=got.strip() or "‹pusty wiersz›",
+                      fix={"confidence": "unique", "command": "rzc fmt -w PLIK", "patch": _diff(src, out)},
+                      notes=["popraw automatycznie: rzc fmt -w PLIK"])
+
+
+def _diff(a, b, limit=40):
+    import difflib
+    d = list(difflib.unified_diff(a.split("\n"), b.split("\n"), "źródło", "kanoniczna", n=0, lineterm=""))
+    if len(d) > limit:
+        d = d[:limit] + [f"… ({len(d) - limit} wierszy różnicy pominięto)"]
+    return "\n".join(d)
+
+
+def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True) -> Result:
     res = Result()
     prog, ch, diags = load(src)
     res.diags += diags
+    if canon and prog is not None:
+        d = canon_diag(src)
+        if d is not None:
+            res.diags.append(d)
     if prog is None or any(d.severity == "error" for d in diags):
         res.summary = {"stage": "front"}
         return res

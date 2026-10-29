@@ -1,11 +1,19 @@
 fn sum_to(n: Nat) -> Nat
     decreases n
 {
-    if n == 0 { 0 } else { n + sum_to(n - 1) }
+    if n == 0 {
+        0
+    } else {
+        n + sum_to(n - 1)
+    }
 }
 
 fn gcd(a: Nat, b: Nat) -> Nat
     decreases b
 {
-    if b == 0 { a } else { gcd(b, a % b) }
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
 }

@@ -12,8 +12,10 @@ def sp(a: Span, b: Span) -> Span:
 
 class Parser:
     def __init__(self, src: str):
-        self.toks = lex(src)
+        self.comments = []
+        self.toks = lex(src, self.comments)
         self.i = 0
+        self.bounds = {}
 
     # ---------- narzędzia ----------
     @property
@@ -74,11 +76,12 @@ class Parser:
 
     def tparams(self):
         ps = []
+        self.bounds = {}
         if self.accept("<"):
             while True:
                 ps.append(self.expect("TIDENT", "parametru typowego").text)
                 if self.accept(":"):
-                    self.expect("TIDENT")      # ograniczenie Eq/Ord — akceptowane
+                    self.bounds[ps[-1]] = self.expect("TIDENT").text   # Eq/Ord — akceptowane
                 if not self.accept(","):
                     break
             self.expect(">")
@@ -109,6 +112,7 @@ class Parser:
         self.expect("fn")
         name = self.expect("IDENT", "nazwy funkcji").text
         tps = self.tparams()
+        bounds = self.bounds
         params = self.params()
         ret = None
         if self.accept("->"):
@@ -137,6 +141,7 @@ class Parser:
         f = FnDecl(name, tps, params, ret, requires, ensures, decreases, examples,
                    body, partial, pub, sp(start, body.span))
         f.lemma = lemma
+        f.tbounds = bounds
         return f
 
     def examples(self):
@@ -170,6 +175,7 @@ class Parser:
         start = self.expect("data").span
         name = self.expect("TIDENT", "nazwy typu").text
         tps = self.tparams()
+        bounds = self.bounds
         self.expect("{")
         ctors = []
         self.skip_semis()
@@ -201,21 +207,27 @@ class Parser:
             self.skip_semis()
             where = self.expr()
             end = where.span
-        return DataDecl(name, tps, ctors, where, sp(start, end))
+        d = DataDecl(name, tps, ctors, where, sp(start, end))
+        d.tbounds = bounds
+        return d
 
     def type_alias(self):
         start = self.expect("type").span
         name = self.expect("TIDENT").text
         tps = self.tparams()
         self.expect("=")
+        bounds = self.bounds
         ty = self.type_()
-        return TypeAlias(name, tps, ty, sp(start, ty.span))
+        t = TypeAlias(name, tps, ty, sp(start, ty.span))
+        t.tbounds = bounds
+        return t
 
     def spec_fn(self):
         start = self.expect("spec").span
         self.expect("fn")
         name = self.expect("IDENT").text
         tps = self.tparams()
+        bounds = self.bounds
         params = self.params()
         self.expect("->")
         ret = self.type_()
@@ -227,7 +239,9 @@ class Parser:
         self.expect("=")
         self.skip_semis()
         body = self.expr()
-        return SpecFn(name, tps, params, body, sp(start, body.span), ret, dec)
+        s = SpecFn(name, tps, params, body, sp(start, body.span), ret, dec)
+        s.tbounds = bounds
+        return s
 
     def const_decl(self):
         start = self.expect("const").span
@@ -457,7 +471,9 @@ class Parser:
         t = self.t
         if t.kind == "INT":
             self.adv()
-            return IntLit(t.value, t.span)
+            lit = IntLit(t.value, t.span)
+            lit.text = t.text         # zapis źródłowy (0x…, 1_000, b'a') dla formatera
+            return lit
         if t.kind in ("true", "false"):
             self.adv()
             return BoolLit(t.kind == "true", t.span)
@@ -564,11 +580,15 @@ class Parser:
             return Pattern("var", name=t.text, span=t.span)
         if t.kind == "INT":
             self.adv()
-            return Pattern("int", value=t.value, span=t.span)
+            p = Pattern("int", value=t.value, span=t.span)
+            p.text = t.text
+            return p
         if t.kind == "-" and self.peek().kind == "INT":
             self.adv()
             v = self.adv()
-            return Pattern("int", value=-v.value, span=sp(t.span, v.span))
+            p = Pattern("int", value=-v.value, span=sp(t.span, v.span))
+            p.text = "-" + v.text
+            return p
         if t.kind in ("true", "false"):
             self.adv()
             return Pattern("bool", value=(t.kind == "true"), span=t.span)
@@ -610,4 +630,7 @@ class Parser:
 
 
 def parse(src: str) -> Program:
-    return Parser(src).program()
+    p = Parser(src)
+    prog = p.program()
+    prog.comments = p.comments
+    return prog

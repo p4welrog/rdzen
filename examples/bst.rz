@@ -3,26 +3,17 @@ data Tree { Leaf, Node(left: Tree, key: Int, right: Tree) }
 spec fn mem(t: Tree, k: Int) -> Bool
     decreases t
 =
-    match t {
-        Leaf => false,
-        Node(l, x, r) => x == k || mem(l, k) || mem(r, k),
-    }
+    match t { Leaf => false, Node(l, x, r) => x == k || mem(l, k) || mem(r, k) }
 
 spec fn all_lt(t: Tree, b: Int) -> Bool
     decreases t
 =
-    match t {
-        Leaf => true,
-        Node(l, x, r) => x < b && all_lt(l, b) && all_lt(r, b),
-    }
+    match t { Leaf => true, Node(l, x, r) => x < b && all_lt(l, b) && all_lt(r, b) }
 
 spec fn all_gt(t: Tree, b: Int) -> Bool
     decreases t
 =
-    match t {
-        Leaf => true,
-        Node(l, x, r) => x > b && all_gt(l, b) && all_gt(r, b),
-    }
+    match t { Leaf => true, Node(l, x, r) => x > b && all_gt(l, b) && all_gt(r, b) }
 
 spec fn is_bst(t: Tree) -> Bool
     decreases t
@@ -35,10 +26,7 @@ spec fn is_bst(t: Tree) -> Bool
 spec fn size(t: Tree) -> Nat
     decreases t
 =
-    match t {
-        Leaf => 0,
-        Node(l, x, r) => 1 + size(l) + size(r),
-    }
+    match t { Leaf => 0, Node(l, x, r) => 1 + size(l) + size(r) }
 
 lemma fn gt_not_mem(t: Tree, b: Int, k: Int)
     requires all_gt(t, b) && k <= b

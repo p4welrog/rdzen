@@ -1,8 +1,8 @@
 // =====================================================================
-//  Rdzeń — formalna definicja języka programowania (wersja 0.5)
+//  Rdzeń — formalna definicja języka programowania (wersja 0.6)
 // =====================================================================
 
-#set document(title: "Rdzeń — formalna definicja języka, wersja 0.5")
+#set document(title: "Rdzeń — formalna definicja języka, wersja 0.6")
 #set page(
   paper: "a4",
   margin: (x: 2.3cm, y: 2.4cm),
@@ -100,7 +100,7 @@
   #v(0.3em)
   #text(size: 14pt)[Formalna definicja języka programowania]
   #v(0.6em)
-  #text(size: 11pt)[Wersja 0.5 — szkic normatywny]
+  #text(size: 11pt)[Wersja 0.6 — szkic normatywny]
   #v(0.4em)
   #text(size: 10pt, style: "italic")[29 października 2026]
   #v(2.5cm)
@@ -312,13 +312,33 @@ Od najsłabszego: `||`, `&&`, porównania (niełączne — `a < b < c` jest bł�
   importów leksykograficzna). Program $P$ jest *kanoniczny*, gdy $fmt(parse(P)) = P$.
 ]
 
-Forma kanoniczna umieszcza klauzule `requires`, `ensures`, `decreases`, `invariant` w osobnych
-wierszach z wcięciem o jeden poziom, a klamrę otwierającą ciało — w osobnym wierszu, jeśli
-występuje co najmniej jedna klauzula; w przeciwnym razie klamra kończy wiersz nagłówka.
+Drzewo $"AST"$ obejmuje tu komentarze (przypisane jednostkom: deklaracji, klauzuli, instrukcji,
+gałęzi `match`, konstruktorowi), zapis literałów całkowitych (`0x…`, `1_000`, `b'a'`) oraz
+informację o pustych wierszach między instrukcjami. Funkcja $fmt$ jest wyznaczona regułami:
+
++ Klauzule `requires`, `ensures`, `decreases` (w tej kolejności), blok `examples` oraz
+  adnotacje pętli `invariant`, `decreases` stoją w osobnych wierszach z wcięciem o jeden poziom;
+  klamra otwierająca ciało stoi w osobnym wierszu, jeśli występuje co najmniej jedna klauzula,
+  w przeciwnym razie kończy wiersz nagłówka.
++ `if` i `match` w pozycji instrukcji są zawsze wielowierszowe (`} else if … {` i `} else {`
+  w jednym wierszu; gałęzie `match` zakończone przecinkiem). W pozycji wyrażenia są
+  jednowierszowe, jeśli mieszczą się w wierszu, nie zawierają komentarzy, a gałęzie są wyrażeniami
+  albo blokami z jedną prostą instrukcją (`Some(v) => { n = v }`).
++ Nawiasy są wypisywane tam, gdzie wymaga ich odtworzenie drzewa (§2.4), oraz dla czytelności:
+  wokół `&&` będącego argumentem `||` i wokół `if`/`match` będących argumentem operatora.
+  Grupowanie zapisane przez programistę, które zmienia drzewo (np. `a - (b - c)`), jest zachowane.
++ Wiersz dłuższy niż 100 znaków jest łamany kolejno: po operatorach łańcucha `&&`/`||`
+  (operator na końcu wiersza, zgodnie z regułą układu), po argumentach wywołania (jeden na
+  wiersz, z przecinkiem końcowym), po dwukropku kwantyfikatora lub strzałce domknięcia; nagłówek
+  funkcji — po parametrach (jeden na wiersz).
++ Deklaracje są oddzielone jednym pustym wierszem, z wyjątkiem kolejnych deklaracji
+  jednowierszowych bez pustego wiersza w źródle (grupa). Wewnątrz bloku zachowywany jest najwyżej
+  jeden pusty wiersz między instrukcjami; nigdy bezpośrednio po `{` ani przed `}`.
++ Komentarz w osobnym wierszu poprzedza swoją jednostkę i ma jej wcięcie; komentarz końcowy
+  zostaje na końcu wiersza swojej jednostki, oddzielony dwiema spacjami.
 
 Kompilator odrzuca program niekanoniczny błędem `E0100`, załączając jako
-poprawkę wynik $fmt(parse(P))$. Komentarze są częścią AST i zachowują pozycję
-względem węzłów.
+poprawkę wynik $fmt(parse(P))$ (różnicę wierszy); `rzc fmt -w` zapisuje postać kanoniczną.
 
 == Odstępstwa od języków wzorcowych
 
@@ -1268,6 +1288,9 @@ weryfikacji:
 + kontrakty funkcji `extern` — przyjmowane bez dowodu; każde wywołanie `extern` ma ponadto
   sprawdzenie dynamiczne warunku końcowego, o ile jest on wykonywalny;
 + poprawność kompilatora z jądra do kodu docelowego (C lub WebAssembly) i środowiska wykonawczego;
+  w prototypie oba generatory (Python i C) są nieweryfikowane i testowane różnicowo względem
+  interpretera jądra (w tym z wymuszonymi sprawdzeniami dynamicznymi i z programami, których
+  zobowiązania obalono, oraz — dla C — pod kontrolą UBSan i ASan);
 + zgodność modelu kosztów: nieobecność przepełnienia stosu wywołań nie jest gwarantowana
   (przepełnienie stosu jest pułapką `stack`, traktowaną jak $"Div"$).
 
@@ -1564,7 +1587,11 @@ jest wskazane w raporcie kompilacji.
 ]
 #dowod[$fmt$ wypisuje nawiasy wszędzie tam, gdzie priorytety z §2.4 wymagają ich do odtworzenia
   drzewa, i łamie wiersze tylko po tokenach, po których reguła układu (§2.2) nie wstawia średnika
-  albo gdzie wstawiony średnik jest zgodny ze strukturą. Indukcja po $A$.]
+  albo gdzie wstawiony średnik jest zgodny ze strukturą. Indukcja po $A$. W prototypie własność
+  jest sprawdzana testami: dla każdego programu w repozytorium $fmt$ zachowuje drzewo i komplet
+  komentarzy, jest idempotentna, a losowe zmiany wcięć i odstępów między tokenami nie zmieniają
+  wyniku (jednoznaczność postaci kanonicznej). Kompilator nie zgłasza `E0100`, jeśli $fmt$ dla danego
+  tekstu nie zachowałby drzewa.]
 
 #twierdzenie(title: "determinizm kompilacji")[
   Lista diagnostyk, statusy zobowiązań i kod wynikowy zależą wyłącznie od tekstu programu,
@@ -1577,21 +1604,53 @@ jest wskazane w raporcie kompilacji.
 == Status dowodów
 
 #table(
-  columns: (auto, auto, 1fr),
+  columns: (auto, 1fr, 1fr),
   inset: 5pt,
   stroke: 0.4pt + luma(200),
   [*Wynik*], [*Status*], [*Ocena ryzyka*],
-  [Lematy 8.1–8.3], [szkic], [niskie — konstrukcja standardowa dla języków z semantyką wartości i `inout` (por. Hylo, Swift)],
+  [Lematy 8.1–8.2], [szkic], [niskie — konstrukcja standardowa dla języków z semantyką wartości i `inout` (por. Hylo, Swift)],
+  [Lemat 8.3], [zmechanizowany dla fragmentu (§8.5)], [niskie],
   [Tw. 8.4], [szkic], [niskie — standardowe bezpieczeństwo typów z ramkami sterowania],
-  [Tw. 8.5], [szkic], [*średnie* — interakcja `break`/`continue`/`return` z niezmiennikami oraz z parametrami `inout` w wywołaniach zagnieżdżonych; wymaga starannej definicji $ws$],
-  [Tw. 8.6], [szkic], [*średnie* — wymaga precyzyjnego wykazania, że hipotezy $VC_kappa$ to dokładnie zobowiązania napotkane wcześniej na ścieżce, także przez granice funkcji i domknięć],
-  [Tw. 8.7–8.8], [szkic], [niskie],
+  [Tw. 8.5], [zmechanizowane dla fragmentu (§8.5)], [niskie dla fragmentu; *średnie* dla zgodności elaboracji (tablice, domknięcia, typy funkcyjne)],
+  [Tw. 8.6], [zmechanizowane dla fragmentu (§8.5)], [niskie dla fragmentu; *średnie* dla granic domknięć i monitorów typów funkcyjnych],
+  [Tw. 8.7], [część 2 zmechanizowana dla pętli i wywołań modularnych (§8.5)], [niskie; terminacja rekursji — szkic],
+  [Tw. 8.8], [szkic], [niskie],
   [Tw. 8.9–8.10], [zobowiązanie implementacyjne], [niskie — weryfikowalne testami właściwości implementacji],
   [Hipoteza 6.3], [otwarta], [wpływa tylko na kompletność, nie na poprawność],
 )
 
-Zalecana kolejność mechanizacji (Lean 4 lub Coq): jądro sekwencyjne bez aktorów z lematami
-8.1–8.3 i tw. 8.4; następnie generator warunków weryfikacji i tw. 8.5–8.6; na końcu aktorzy.
+== Mechanizacja (Lean 4)
+
+Katalog `lean/` repozytorium zawiera mechanizację (Lean 4, bez bibliotek zewnętrznych; dowody nie
+używają `sorry`, a jedynymi aksjomatami są `propext`, `Quot.sound` i `Classical.choice`) dla
+*fragmentu sekwencyjnego*, który obejmuje elementy oznaczone wyżej jako ryzyko średnie:
+
+- instrukcje z `break`, `continue`, `return`, pętle z niezmiennikiem i wariantem, zobowiązania
+  jawne i sprawdzenia dynamiczne oraz modularne wywołania procedur z parametrami wartościowymi
+  i `inout`;
+- każde zobowiązanie ma tryb: `proved` (naruszenie obserwowane jako wynik `fail`), `checked`
+  (pułapka) lub `erased` (usunięte przez $cal(R)$);
+- semantyka z paliwem (maleje przy każdym obrocie pętli i wywołaniu), $wp$ względem czwórki
+  warunków końcowych; havoc pętli tylko dla zmiennych zapisywanych w ciele; wywołanie przez
+  kontrakt z niezależnym podstawieniem celów `inout`;
+- wyrażenia i formuły osadzone płytko (funkcje stanu), typ wartości dowolny.
+
+#table(
+  columns: (auto, 1fr),
+  inset: 5pt,
+  stroke: 0.4pt + luma(200),
+  [*Twierdzenie Lean*], [*Odpowiednik*],
+  [`exec_frame`], [lemat 8.3 w postaci ramki zapisu: wykonanie zmienia tylko `writes s` (podstawa havoc w regule pętli i własności ramki wywołania)],
+  [`soundness`, `no_fail`], [tw. 8.5: przy poprawnym VC żadne wykonanie nie narusza udowodnionego zobowiązania, a wynik spełnia odpowiednią składową czwórki warunków końcowych],
+  [`no_trap`], [tw. 8.5 (1): program bez sprawdzeń dynamicznych nie kończy się pułapką],
+  [`erase_exec`, `gradual`], [tw. 8.6 i przekształcenie $cal(R)$: usunięcie udowodnionych zobowiązań nie zmienia wykonania; program wykonywalny kończy się zgodnie z kontraktem albo pułapką sprawdzenia],
+  [`terminates`], [tw. 8.7 (2) dla pętli: przy poprawnym VC i terminujących wywoływanych procedurach każde wykonanie jest skończone, niezależnie od tego, czy wariant jest dowiedziony, czy sprawdzany],
+  [`exclusivity_necessary`], [konieczność prawa wyłączności (§5.4): kontrprzykład, w którym wywołanie `f(&y, &y)` ma prawdziwy warunek weryfikacji, a wykonanie łamie warunek końcowy],
+)
+
+Poza mechanizacją pozostają: typowanie (lematy 8.1–8.2, tw. 8.4), zgodność elaboracji
+pełnej składni z fragmentem (w tym tablice jako wartości, domknięcia i typy funkcyjne), dobra
+określoność formuł (tw. 8.8), terminacja rekursji przez miary `decreases` oraz aktorzy.
 
 = Diagnostyka
 

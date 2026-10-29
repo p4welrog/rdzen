@@ -6,6 +6,10 @@ Użycie:
   rzc check PLIK.rz [--json] [--rlimit N]   weryfikacja, przykłady, diagnostyka
   rzc emit PLIK.rz [-o WYJŚCIE.py]           generowanie modułu Pythona
   rzc run PLIK.rz FUNKCJA [ARG ...]         uruchomienie funkcji w interpreterze
+  rzc emit-c PLIK.rz [-o WYJŚCIE.c]          generowanie jednostki kompilacji C (GCC/Clang)
+  rzc fmt PLIK.rz [-w | --check]            postać kanoniczna (wypisanie, zapis w miejscu, sprawdzenie)
+
+Opcja --no-canon wyłącza błąd E0100 (program w postaci niekanonicznej).
 """
 import os
 import sys
@@ -17,9 +21,39 @@ from rdzen.driver import compile_source          # noqa: E402
 from rdzen.diag import render_text, dumps_json   # noqa: E402
 
 
-def cmd_check(path, as_json, rlimit):
+def cmd_fmt(paths, write, check):
+    from rdzen.fmt import check_format
+    from rdzen.diag import CompileError
+    rc = 0
+    for path in paths:
+        src = open(path, encoding="utf-8").read()
+        try:
+            out, ok = check_format(src)
+        except CompileError as e:
+            lines = src.split("\n")
+            print(render_text(e.diag, path, lines), file=sys.stderr)
+            rc = 1
+            continue
+        if not ok:
+            print(f"{path}: formatter zmieniłby drzewo składni lub komentarze — plik pozostawiony", file=sys.stderr)
+            rc = 1
+            continue
+        if check:
+            if out != src:
+                print(f"{path}: postać niekanoniczna")
+                rc = 1
+        elif write:
+            if out != src:
+                open(path, "w", encoding="utf-8").write(out)
+                print(f"sformatowano {path}")
+        else:
+            sys.stdout.write(out)
+    return rc
+
+
+def cmd_check(path, as_json, rlimit, canon=True):
     src = open(path, encoding="utf-8").read()
-    res = compile_source(src, rlimit=rlimit)
+    res = compile_source(src, rlimit=rlimit, canon=canon)
     if as_json:
         out = {"file": path, "diagnostics": json.loads(dumps_json(res.diags, path)), "summary": res.summary}
         print(json.dumps(out, ensure_ascii=False, indent=2))
@@ -40,10 +74,12 @@ def cmd_check(path, as_json, rlimit):
     return 1 if errors else 0
 
 
-def cmd_emit(path, out, rlimit):
+def cmd_emit(path, out, rlimit, canon=True, backend="py"):
     from rdzen.emit_py import emit, Unsupported
+    if backend == "c":
+        from rdzen.emit_c import emit_c as emit
     src = open(path, encoding="utf-8").read()
-    res = compile_source(src, rlimit=rlimit)
+    res = compile_source(src, rlimit=rlimit, canon=canon)
     errors = [d for d in res.diags if d.severity in ("error", "hole")]
     if errors:
         lines = src.split("\n")
@@ -98,17 +134,21 @@ def cmd_run(path, fn, args):
 
 
 def main(argv):
-    if len(argv) < 3 or argv[1] not in ("check", "run", "emit"):
+    if len(argv) < 3 or argv[1] not in ("check", "run", "emit", "emit-c", "fmt"):
         print(__doc__)
         return 2
+    canon = "--no-canon" not in argv
+    if argv[1] == "fmt":
+        files = [a for a in argv[2:] if not a.startswith("-")]
+        return cmd_fmt(files, "-w" in argv, "--check" in argv)
     if argv[1] == "check":
         rl = 1_000_000
         if "--rlimit" in argv:
             rl = int(argv[argv.index("--rlimit") + 1])
-        return cmd_check(argv[2], "--json" in argv, rl)
-    if argv[1] == "emit":
+        return cmd_check(argv[2], "--json" in argv, rl, canon)
+    if argv[1] in ("emit", "emit-c"):
         out = argv[argv.index("-o") + 1] if "-o" in argv else None
-        return cmd_emit(argv[2], out, 1_000_000)
+        return cmd_emit(argv[2], out, 1_000_000, canon, "c" if argv[1] == "emit-c" else "py")
     return cmd_run(argv[2], argv[3], argv[4:])
 
 

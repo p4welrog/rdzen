@@ -56,7 +56,10 @@ fn fold(xs: Array<Int>, init: Int, step: fn(acc: Int, x: Int) -> Int) -> Int {
 }
 
 // Uściślenia zależne: wynik większy od argumentu, ale nie więcej niż o 10.
-fn apply_twice(f: fn(x: Int where self < 1000000) -> Int where self > x && self <= x + 10, a: Int) -> Int
+fn apply_twice(
+    f: fn(x: Int where self < 1000000) -> Int where self > x && self <= x + 10,
+    a: Int,
+) -> Int
     requires a < 1000
     ensures result > a + 1
 {

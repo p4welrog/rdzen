@@ -3,7 +3,7 @@
 Rdzeń to mały język z kontraktami sprawdzanymi statycznie przez Z3. Program przechodzi
 kompilację tylko wtedy, gdy każde zobowiązanie (warunki, niezmienniki, indeksy, przepełnienia)
 jest udowodnione albo — gdy solver nie rozstrzygnie — zamienione na sprawdzenie w czasie
-wykonania. Wynik to moduł Pythona (`rzc emit`).
+wykonania. Wynik to moduł Pythona (`rzc emit`) albo plik C (`rzc emit-c`).
 
 ## 1. Układ tekstu
 
@@ -16,6 +16,8 @@ wykonania. Wynik to moduł Pythona (`rzc emit`).
 - Porównania są niełączne: `0 <= i < n` to błąd; pisz `0 <= i && i < n`.
 - `} else {` w jednym wierszu (po `}` na końcu wiersza instrukcja się kończy).
 - Nazwy wartości i funkcji małą literą, typy i konstruktory wielką.
+- Program musi być w postaci kanonicznej (`E0100`). Nie formatuj ręcznie: przed sprawdzeniem
+  uruchom `rzc fmt -w plik.rz` (zachowuje komentarze; łamie wiersze dłuższe niż 100 znaków).
 
 ## 2. Typy
 
@@ -197,6 +199,7 @@ Czyste funkcje preludium (wszystkie poza `push`, `pop`) są dozwolone także w f
 | E3016 | funkcja nie może być wartością (`requires`, `inout`, generyczna, częściowa, lemat, rekursja) | warunek do typu parametru albo opakuj w domknięcie |
 | E2141 | adnotacja domknięcia z uściśleniem innym niż oczekiwane | pomiń adnotację |
 | H7001 | dziura `?nazwa` | raport: typ, cel, hipotezy, kandydaci |
+| E0100 | program nie w postaci kanonicznej | `rzc fmt -w plik.rz` |
 
 Kontrprzykład **rzeczywisty** (odtworzony w interpreterze) = błąd w kodzie lub w specyfikacji.
 Kontrprzykład **indukcyjny** (wartości opisane „po pętli z wiersza N” lub „wynik wywołania”) =

@@ -10,7 +10,10 @@ fn a(xs: Array<Int>) -> Int
 fn b(o: Option<Nat>, xs: Array<Nat>) -> Int
     ensures false
 {
-    match o { Some(v) => v, None => xs.len }
+    match o {
+        Some(v) => v,
+        None => xs.len,
+    }
 }
 
 fn c(t: Tree) -> Int

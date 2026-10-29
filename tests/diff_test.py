@@ -30,9 +30,11 @@ def pystr(v):
 
 def run_file(path, tmp):
     src = open(path, encoding="utf-8").read()
-    res = compile_source(src, run_examples=False, rlimit=int(os.environ.get("RLIMIT", 1_000_000)))
-    if any(d.severity in ("error", "hole") for d in res.diags):
+    res = compile_source(src, run_examples=False, canon=False, rlimit=int(os.environ.get("RLIMIT", 1_000_000)))
+    if res.checker is None or any(d.severity == "hole" for d in res.diags):
         return None
+    if os.environ.get("ERRORS") != "1" and any(d.severity == "error" for d in res.diags):
+        return None     # ERRORS=1: także programy z obalonymi zobowiązaniami (ćwiczy pułapki)
     try:
         code = emit(res, os.path.basename(path))
     except Unsupported as e:

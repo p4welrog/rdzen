@@ -36,7 +36,8 @@ prototyp ich nie obsługuje; wtedy napisz zwykły kod.
 2. **Ciało z niezmiennikami.** Każda pętla: niezmiennik z granicami indeksów, faktami o każdej
    zapisywanej zmiennej (także `xs.len == old(xs).len` przy zapisie elementów) i `decreases`.
    W miejscach niepewnych wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.
-3. **Pętla kompilacji:** `python3 ~/rdzen/rzc check plik.rz --json`. Czytaj `code`,
+3. **Pętla kompilacji:** `python3 ~/rdzen/rzc fmt -w plik.rz`, potem
+   `python3 ~/rdzen/rzc check plik.rz --json`. Czytaj `code`,
    `obligation.formula`, `counterexample` (`class`: `real` = błąd w kodzie lub specyfikacji;
    `inductive` = za słaby niezmiennik albo `ensures` wywoływanej funkcji) i `notes`.
    Poprawiaj i powtarzaj; do ok. 8 iteracji, potem opisz użytkownikowi, co nie przechodzi.
@@ -48,13 +49,16 @@ prototyp ich nie obsługuje; wtedy napisz zwykły kod.
 6. **Generowanie:** `python3 ~/rdzen/rzc emit plik.rz -o modul.py`, zaimportuj moduł i wywołaj
    funkcję na przykładach. Pułapka czasu wykonania to wyjątek `RdzenTrap(kind, loc)`.
    Napisy przekazuj przez `modul.rz_str("…")`, wynik czytaj przez `modul.py_str(b)`.
+   Gdy użytkownik potrzebuje C: `python3 ~/rdzen/rzc emit-c plik.rz -o modul.c` (GCC/Clang,
+   `-std=gnu11`); funkcja `f` ma w C nazwę `fn_f`, `Int` to `int64_t`, tablica `A_Int_`
+   (`.len`, `.d`), pułapka kończy program komunikatem (albo `longjmp`, gdy ustawiono `rz_jb`).
 
 ## 3. Wynik dla użytkownika
 
 Przekaż plik `.rz` i wygenerowany `.py` oraz krótki raport: liczba udowodnionych zobowiązań,
 lista pozostałych sprawdzeń dynamicznych (jeśli są), oraz co jest zaufane bez dowodu:
-kontrakty funkcji preludium, Z3, generator kodu Pythona (nieweryfikowany, testowany różnicowo
-względem interpretera). Gwarancja dotyczy zgodności ze specyfikacją — specyfikację warto
+kontrakty funkcji preludium, Z3, generator kodu Pythona lub C (nieweryfikowany, testowany
+różnicowo względem interpretera). Gwarancja dotyczy zgodności ze specyfikacją — specyfikację warto
 pokazać użytkownikowi do przejrzenia.
 
 ## 4. Referencja języka
@@ -62,7 +66,7 @@ pokazać użytkownikowi do przejrzenia.
 Rdzeń to mały język z kontraktami sprawdzanymi statycznie przez Z3. Program przechodzi
 kompilację tylko wtedy, gdy każde zobowiązanie (warunki, niezmienniki, indeksy, przepełnienia)
 jest udowodnione albo — gdy solver nie rozstrzygnie — zamienione na sprawdzenie w czasie
-wykonania. Wynik to moduł Pythona (`rzc emit`).
+wykonania. Wynik to moduł Pythona (`rzc emit`) albo plik C (`rzc emit-c`).
 
 ### 1. Układ tekstu
 
@@ -75,6 +79,8 @@ wykonania. Wynik to moduł Pythona (`rzc emit`).
 - Porównania są niełączne: `0 <= i < n` to błąd; pisz `0 <= i && i < n`.
 - `} else {` w jednym wierszu (po `}` na końcu wiersza instrukcja się kończy).
 - Nazwy wartości i funkcji małą literą, typy i konstruktory wielką.
+- Program musi być w postaci kanonicznej (`E0100`). Nie formatuj ręcznie: przed sprawdzeniem
+  uruchom `rzc fmt -w plik.rz` (zachowuje komentarze; łamie wiersze dłuższe niż 100 znaków).
 
 ### 2. Typy
 
@@ -256,6 +262,7 @@ Czyste funkcje preludium (wszystkie poza `push`, `pop`) są dozwolone także w f
 | E3016 | funkcja nie może być wartością (`requires`, `inout`, generyczna, częściowa, lemat, rekursja) | warunek do typu parametru albo opakuj w domknięcie |
 | E2141 | adnotacja domknięcia z uściśleniem innym niż oczekiwane | pomiń adnotację |
 | H7001 | dziura `?nazwa` | raport: typ, cel, hipotezy, kandydaci |
+| E0100 | program nie w postaci kanonicznej | `rzc fmt -w plik.rz` |
 
 Kontrprzykład **rzeczywisty** (odtworzony w interpreterze) = błąd w kodzie lub w specyfikacji.
 Kontrprzykład **indukcyjny** (wartości opisane „po pętli z wiersza N” lub „wynik wywołania”) =

@@ -10,8 +10,8 @@ pub fn binary_search(xs: Array<Int>, target: Int) -> Option<Nat>
     examples {
         binary_search([1, 3, 5], 3) == Some(1)
         binary_search([], 7) == None
-        forall xs: Array<Int>, t: Int:
-            !sorted(xs) || (binary_search(xs, t) != None) == contains(xs, t)
+        forall xs: Array<Int>, t: Int: !sorted(xs) ||
+            (binary_search(xs, t) != None) == contains(xs, t)
     }
 {
     var lo = 0

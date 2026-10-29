@@ -36,7 +36,7 @@ for p in sorted(sys.argv[1:]):
     src = open(p).read()
     for line, desc, m in mutants(src):
         total += 1
-        r = compile_source(m)
+        r = compile_source(m, canon=False)   # mutant nie musi być kanoniczny
         if any(d.severity == "error" for d in r.diags):
             killed += 1
         else:
