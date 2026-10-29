@@ -1,0 +1,17 @@
+// expect: E4020, E4010, E4050
+fn first_upper(s: Str) -> Bool
+    requires s.len > 0
+    ensures result == is_upper(s[0])
+{
+    s[0] >= 65 && s[0] <= 91
+}
+
+fn tail(s: Str) -> Str {
+    slice(s, 1, s.len)
+}
+
+fn shift(inout s: Str) {
+    if s.len > 0 {
+        s[0] = s[0] + 1
+    }
+}

@@ -100,7 +100,7 @@
   #v(0.3em)
   #text(size: 14pt)[Formalna definicja języka programowania]
   #v(0.6em)
-  #text(size: 11pt)[Wersja 0.3 — szkic normatywny]
+  #text(size: 11pt)[Wersja 0.4 — szkic normatywny]
   #v(0.4em)
   #text(size: 10pt, style: "italic")[29 października 2026]
   #v(2.5cm)
@@ -189,9 +189,10 @@ true  type  var  where  while
 
 *Literały.*
 - całkowite: `0`, `42`, `1_000_000`, `0xFF`, `0b1010` (separator `_` tylko między cyframi);
-- bajtowe: `b'a'`, `b'\n'`;
+- bajtowe: `b'a'`, `b'\n'` — wartość typu `Byte` (literał musi oznaczać dokładnie jeden bajt UTF-8, inaczej `E0013`);
 - zmiennoprzecinkowe: `1.5`, `2.0e-3` (zawsze z kropką i cyfrą po obu stronach);
-- napisowe: `"..."` z sekwencjami `\n \t \\ \" \u{XXXX}`.
+- napisowe: `"..."` z sekwencjami `\n \t \r \0 \\ \" \' \u{XXXX}` (nieznana sekwencja: `E0014`); literał
+  oznacza tablicę bajtów swojego kodowania UTF-8, np. `"ść"` ma długość 4.
 
 *Komentarze.* `//` do końca wiersza; `///` komentarz dokumentacyjny, przypisany do następnej deklaracji. Komentarzy blokowych nie ma (Z2).
 
@@ -363,8 +364,11 @@ $erase(\{nu : tau | phi\}) = tau$ usuwa uściślenia; statyczna semantyka
 (rozdz. 5) operuje na typach kształtu, a uściślenia są obsługiwane wyłącznie
 przez semantykę weryfikacyjną (rozdz. 6).
 
-Typy `Nat` i `Ordering` są zdefiniowane w preludium (dodatek B):
-`type Nat = Int where self >= 0`.
+Typy `Nat`, `Byte`, `Str` i `Ordering` są zdefiniowane w preludium (dodatek B):
+`type Nat = Int where self >= 0`, `type Byte = Int where 0 <= self && self < 256`,
+`type Str = Array<Byte>`. `Byte` i `Str` w produkcji $B$ są więc skrótami: napis jest tablicą
+bajtów UTF-8 bez osobnego typu kształtu, a wszystkie operacje i zobowiązania tablic stosują się
+do napisów bez zmian.
 
 == Wyrażenia
 
@@ -1869,6 +1873,8 @@ data Caps { Caps(io: Cap<Io>, fs: Cap<Fs>, net: Cap<Net>, clock: Cap<Clock>,
                  rand: Cap<Rand>, ffi: Cap<Ffi>, spawn: Cap<Spawn>) }
 
 type Nat = Int where self >= 0
+type Byte = Int where 0 <= self && self < 256
+type Str = Array<Byte>
 
 const int_max: Int = 0x7FFF_FFFF_FFFF_FFFF
 const int_min: Int = -int_max - 1
@@ -1906,12 +1912,20 @@ fn slice<T>(a: Array<T>, from: Nat, to: Nat) -> Array<T>
     ensures result.len == to - from
     ensures forall k in 0..result.len: result[k] == a[from + k]
 
-// ---- napisy (Str jest w logice tablicą bajtów) ----
-fn str_concat(a: Str, b: Str) -> Str
+// ---- tablice i napisy (Str = Array<Byte>; porównanie napisów: ==) ----
+fn concat<T>(a: Array<T>, b: Array<T>) -> Array<T>       // czysta, dozwolona w formułach
     ensures result.len == a.len + b.len
-fn str_eq(a: Str, b: Str) -> Bool                    // równoważne a == b
-fn parse_int(s: Str) -> Option<Int>
-fn int_to_str(n: Int) -> Str
+    ensures forall k in 0..a.len: result[k] == a[k]
+    ensures forall k in 0..b.len: result[a.len + k] == b[k]
+// slice (wyżej) jest czysta i dozwolona w formułach; jej warunek wstępny jest
+// w formułach zobowiązaniem `wd`
+
+// ---- klasy znaków ASCII (czyste, dozwolone w formułach) ----
+fn is_digit(c: Int) -> Bool       // 48 <= c <= 57
+fn is_lower(c: Int) -> Bool       // 97 <= c <= 122
+fn is_upper(c: Int) -> Bool       // 65 <= c <= 90
+fn is_alpha(c: Int) -> Bool       // is_lower(c) || is_upper(c)
+fn is_space(c: Int) -> Bool       // c ∈ {32, 9, 10, 13}
 
 // ---- liczby zmiennoprzecinkowe (poza logiką) ----
 fn f64_add(a: F64, b: F64) -> F64                    // oraz sub, mul, div, sqrt

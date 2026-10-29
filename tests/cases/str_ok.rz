@@ -1,0 +1,58 @@
+// expect: ok
+fn starts_with(s: Str, p: Str) -> Bool
+    ensures result == (p.len <= s.len && slice(s, 0, p.len) == p)
+    examples {
+        starts_with("rdzeń", "rdz")
+        !starts_with("rd", "rdz")
+    }
+{
+    if p.len > s.len {
+        return false
+    }
+    slice(s, 0, p.len) == p
+}
+
+fn count_digits(s: Str) -> Nat
+    ensures result <= s.len
+    examples {
+        count_digits("a1b22") == 3
+    }
+{
+    var c = 0
+    for x in s
+        invariant 0 <= c && c <= it
+    {
+        if is_digit(x) {
+            c = c + 1
+        }
+    }
+    c
+}
+
+fn shout(s: Str) -> Str
+    ensures result.len == s.len + 1
+    ensures result[s.len] == b'!'
+{
+    concat(s, "!")
+}
+
+fn escape_newlines(s: Str) -> Str
+    requires s.len <= 1000000
+    ensures result.len >= s.len
+    examples {
+        escape_newlines("a\nb") == "a\\nb"
+    }
+{
+    var out: Str = []
+    for c in s
+        invariant out.len >= it && out.len <= 2 * it
+    {
+        if c == b'\n' {
+            push(&out, b'\\')
+            push(&out, b'n')
+        } else {
+            push(&out, c)
+        }
+    }
+    out
+}

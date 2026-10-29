@@ -182,6 +182,7 @@ class Verifier:
         self.loops_by_line = {}
         Verifier._count = getattr(Verifier, "_count", 0) + 1
         self.uid = Verifier._count  # unikalne nazwy funkcji rekurencyjnych we wspólnym kontekście Z3
+        self.str_names = set()     # nazwy zmiennych typu Str (czytelniejsze kontrprzykłady)
         self.recfuns = {}          # (spec, typy) -> RecFunction
         self.ranks = {}            # kształt typu danych -> funkcja rangi
         self.axioms = []           # rank(x) >= 1
@@ -289,7 +290,17 @@ class Verifier:
                 finally:
                     self.tsub = saved
                 return b, z3.And(w, wb)
+            if e.name == "slice":
+                a_, lo, hi = args
+                w = z3.And(w, 0 <= lo, lo <= hi, hi <= self.enc.arr_len(a_))
             return self.builtin_pure(e, args), w
+        if isinstance(e, ArrayLit):
+            vals, ws = [], [T]
+            for it in e.items:
+                t, wi = self.tr(it, env, fx)
+                vals.append(t)
+                ws.append(wi)
+            return self.enc.arr_lit(self.T(e.ty), vals), z3.And(*ws)
         if isinstance(e, CtorCall):
             args = []
             w = T
@@ -361,6 +372,24 @@ class Verifier:
 
     def builtin_pure(self, e, args):
         n = e.name
+        if n in ("is_digit", "is_alpha", "is_lower", "is_upper", "is_space"):
+            c = args[0]
+            rng = lambda a, b: z3.And(c >= a, c <= b)
+            return {"is_digit": rng(48, 57), "is_lower": rng(97, 122), "is_upper": rng(65, 90),
+                    "is_alpha": z3.Or(rng(65, 90), rng(97, 122)),
+                    "is_space": z3.Or(c == 32, c == 9, c == 10, c == 13)}[n]
+        if n == "concat":
+            a, b = args
+            la = self.enc.arr_len(a)
+            k = z3.FreshInt("k")
+            data = z3.Lambda([k], z3.If(k < la, z3.Select(self.enc.arr_data(a), k),
+                                        z3.Select(self.enc.arr_data(b), k - la)))
+            return self.enc.mk_arr(a.sort(), la + self.enc.arr_len(b), data)
+        if n == "slice":
+            a, lo, hi = args
+            k = z3.FreshInt("k")
+            data = z3.Lambda([k], z3.Select(self.enc.arr_data(a), k + lo))
+            return self.enc.mk_arr(a.sort(), hi - lo, data)
         if n == "compare":
             rt = RT("Data", "Ordering")
             a, b = args
@@ -622,6 +651,11 @@ class Verifier:
             return s.bind(e.args[0].inout, new), res
         if n == "filled":
             s = self.ob("pre", s, args[0] >= 0, ("pre", e.span, e.span), e.span, f"{show(e.args[0].expr)} >= 0")
+        if n == "slice":
+            a_, lo, hi = args
+            s = self.ob("pre", s, z3.And(0 <= lo, lo <= hi, hi <= self.enc.arr_len(a_)), ("pre", e.span, e.span), e.span,
+                        f"0 <= {show(e.args[1].expr)} && {show(e.args[1].expr)} <= {show(e.args[2].expr)} && "
+                        f"{show(e.args[2].expr)} <= {show(e.args[0].expr, prec=9)}.len")
         return s, self.builtin_pure(e, args)
 
     def call_user(self, e, s, args, sig, targs):
@@ -790,6 +824,8 @@ class Verifier:
             rt = st.tys.get(w)
             nv = self.enc.fresh(w, rt)
             self.desc[str(nv)] = (w, why)
+            if self.is_str_type(rt):
+                self.str_names.add(w)
             env[w] = nv
         st2 = State(env, st.pc, True, st.tys, st.facts)
         for w in sorted(names):
@@ -930,6 +966,8 @@ class Verifier:
         for (pn, pt, pinout) in sig.params:
             env[pn] = z3.Const(pn, self.enc.sort(pt))
             tys[pn] = pt
+            if self.is_str_type(pt):
+                self.str_names.add(pn)
         st = State(env, (), False, tys, ())
         hyps = []
         for (pn, pt, pinout) in sig.params:
@@ -1203,7 +1241,7 @@ class Verifier:
     def small_model(self, s, exprs):
         """Próba znalezienia kontrprzykładu o małych wartościach (czytelność diagnostyki)."""
         from .driver import collect_consts
-        bounds = []
+        bounds, printable = [], []
         for c in collect_consts(exprs):
             srt = c.sort()
             if srt == z3.IntSort():
@@ -1213,18 +1251,27 @@ class Verifier:
                 bounds.append(z3.And(ln >= 0, ln <= 5))
                 data = srt.accessor(0, 1)(c)
                 if data.sort().range() == z3.IntSort():
+                    is_str = str(c).split("@")[0] in self.str_names
                     for i in range(5):
                         bounds.append(z3.And(z3.Select(data, i) >= -100, z3.Select(data, i) <= 100))
+                        if is_str:   # napisy: najpierw spróbuj drukowalnego ASCII
+                            printable.append(z3.And(z3.Select(data, i) >= 32, z3.Select(data, i) <= 126))
         if not bounds:
             return None
-        s.push()
-        s.add(*bounds)
-        try:
-            if s.check() == z3.sat:
-                return s.model()
-        finally:
-            s.pop()
+        for extra in ([printable] if printable else []) + [[]]:
+            s.push()
+            s.add(*bounds, *extra)
+            try:
+                if s.check() == z3.sat:
+                    return s.model()
+            finally:
+                s.pop()
         return None
+
+    def is_str_type(self, rt):
+        br = getattr(self.ch, "byte_ref", None)
+        return (rt is not None and rt.kind == "Array" and br is not None and rt.args[0].kind == "Int"
+                and any(r is br for r in rt.args[0].refs))
 
     def check_valid(self, pc, phi):
         s = z3.Solver()

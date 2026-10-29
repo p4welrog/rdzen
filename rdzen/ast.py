@@ -269,6 +269,12 @@ class ArrayLit(Node):
 
 
 @dataclass(eq=False)
+class StrLit(ArrayLit):
+    """Literał napisowy: tablica bajtów UTF-8 (typ `Str = Array<Byte>`)."""
+    text: str = ""
+
+
+@dataclass(eq=False)
 class Index(Node):
     expr: Node
     index: Node

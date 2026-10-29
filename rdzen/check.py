@@ -128,6 +128,14 @@ def builtin_sigs():
         FnSig("checked_add", [], [_param("a", INT), _param("b", INT)], opt(INT), [], [], None, False, True, True),
         FnSig("checked_sub", [], [_param("a", INT), _param("b", INT)], opt(INT), [], [], None, False, True, True),
         FnSig("checked_mul", [], [_param("a", INT), _param("b", INT)], opt(INT), [], [], None, False, True, True),
+        # napisy (Str = Array<Byte>): klasy znaków ASCII
+        FnSig("is_digit", [], [_param("c", INT)], BOOL, [], [], None, False, True, True),
+        FnSig("is_alpha", [], [_param("c", INT)], BOOL, [], [], None, False, True, True),
+        FnSig("is_lower", [], [_param("c", INT)], BOOL, [], [], None, False, True, True),
+        FnSig("is_upper", [], [_param("c", INT)], BOOL, [], [], None, False, True, True),
+        FnSig("is_space", [], [_param("c", INT)], BOOL, [], [], None, False, True, True),
+        FnSig("concat", ["T"], [_param("a", arr), _param("b", arr)], arr, [], [], None, False, True, True),
+        FnSig("slice", ["T"], [_param("a", arr), _param("lo", INT), _param("hi", INT)], arr, [], [], None, False, True, True),
     ]
     return {s.name: s for s in sigs}
 
@@ -190,12 +198,17 @@ class Checker:
             if len(args) != len(d.tparams):
                 raise err("E2001", t.span, f"typ `{n}` przyjmuje {len(d.tparams)} argumentów", ["3.1"])
             return RT("Data", n, args)
-        if n in ("Str", "Byte", "F64", "Cap", "Chan", "Mailbox"):
+        if n in ("F64", "Cap", "Chan", "Mailbox"):
             raise err("E2002", t.span, f"typ `{n}` nie jest obsługiwany w prototypie", ["3.1"])
         raise err("E1001", t.span, f"nieznany typ `{n}`", ["3.1"])
 
     # ---------- zbieranie deklaracji ----------
     def collect(self):
+        self._collect()
+        al = self.aliases.get("Byte")
+        self.byte_ref = al.type.formula if al is not None and isinstance(al.type, TRefine) else None
+
+    def _collect(self):
         for it in self.items:
             if isinstance(it, DataDecl):
                 if it.name in self.data:
@@ -547,6 +560,8 @@ class Checker:
             return t.args[0]
         if isinstance(e, ArrayLit):
             el = expected.args[0] if expected is not None and expected.kind == "Array" else None
+            if el is None and isinstance(e, StrLit):
+                el = self.resolve(TName("Byte", []), [])
             for it in e.items:
                 t = self.infer(it, env, ctx, el)
                 if el is None:

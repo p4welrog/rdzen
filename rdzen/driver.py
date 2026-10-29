@@ -198,8 +198,8 @@ def refuted_diag(o, ch, ver, fdecl):
     try:
         for (pn, pt, pinout) in sig.params:
             vals.append(model_value(m, z3.Const(pn, ver.enc.sort(pt))))
-        for (pn, _, _), v in zip(sig.params, vals):
-            assignment[pn] = fmt(v)
+        for (pn, pt, _), v in zip(sig.params, vals):
+            assignment[pn] = fmt_t(v, pt, ch)
         it = Interp(ch, budget=500_000)
         try:
             it.call_fn(sig, vals, None, check_pre=False)
@@ -211,7 +211,7 @@ def refuted_diag(o, ch, ver, fdecl):
     except NotReplayable:
         for (pn, pt, pinout) in sig.params:
             try:
-                assignment[pn] = str(m.eval(z3.Const(pn, ver.enc.sort(pt)), model_completion=True))
+                assignment[pn] = raw_value(m, z3.Const(pn, ver.enc.sort(pt)), pt, ch)
             except Exception:
                 pass
     # dodatkowe stałe (havoc, wyniki wywołań)
@@ -223,7 +223,7 @@ def refuted_diag(o, ch, ver, fdecl):
             try:
                 val = fmt(model_value(m, c))
             except NotReplayable:
-                val = str(m.eval(c, model_completion=True))
+                val = raw_value(m, c, None, ch)
             key = disp
             while key in assignment:
                 key += "'"
@@ -263,6 +263,34 @@ def refuted_diag(o, ch, ver, fdecl):
     return d, status
 
 
+def raw_value(m, c, rt, ch):
+    """Wartość z modelu, której nie da się odtworzyć (np. bardzo długa tablica)."""
+    try:
+        return fmt_t(model_value(m, c), rt, ch)
+    except NotReplayable:
+        srt = c.sort()
+        if isinstance(srt, z3.DatatypeSortRef) and srt.name().startswith("Arr["):
+            ln = m.eval(srt.accessor(0, 0)(c), model_completion=True)
+            return f"‹tablica o długości {ln}›"
+        return str(m.eval(c, model_completion=True))
+
+
+def fmt_t(v, rt, ch):
+    """Wartość z uwzględnieniem typu: `Str` (tablica bajtów UTF-8) jako literał napisowy."""
+    br = getattr(ch, "byte_ref", None)
+    if (rt is not None and rt.kind == "Array" and br is not None and rt.args[0].kind == "Int"
+            and any(r is br for r in rt.args[0].refs) and isinstance(v, list)
+            and all(isinstance(x, int) and 0 <= x < 256 for x in v)):
+        try:
+            text = bytes(v).decode("utf-8")
+            if all(ch_.isprintable() or ch_ in "\n\t\r" for ch_ in text):
+                esc = text.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
+                return f'"{esc}"'
+        except UnicodeDecodeError:
+            pass
+    return fmt(v)
+
+
 def falsify(o, ch, fdecl, tries=300):
     """Zobowiązanie nierozstrzygnięte przez solver: próba obalenia testowaniem losowym
     (wejścia spełniające warunki wstępne, wykonanie w interpreterze ze sprawdzeniami)."""
@@ -296,8 +324,8 @@ def falsify(o, ch, fdecl, tries=300):
             env = shrink(ch, binders, env, failing)
             return Diagnostic(CODE[o.kind], "error", o.span, MSG[o.kind], SPEC[o.kind],
                               obligation=_obj(o, "refuted"),
-                              counterexample={"assignment": {n: fmt(v) for n, v in env.items()}, "descriptions": {},
-                                              "class": "real", "replay": "confirmed"},
+                              counterexample={"assignment": {n: fmt_t(v, dict(binders)[n], ch) for n, v in env.items()},
+                                              "descriptions": {}, "class": "real", "replay": "confirmed"},
                               notes=["solver nie rozstrzygnął zobowiązania; kontrprzykład znaleziono testowaniem losowym "
                                      f"(przypadek {case + 1} z {tries})"],
                               label=o.label or f"zobowiązanie {o.kind}: {o.text}")
@@ -426,7 +454,8 @@ def run_example(f, ex, ch, src):
             if isinstance(fr, str):
                 notes.append(fr)
             return Diagnostic("E4310", "error", ex.span, "test właściwości znalazł kontrprzykład", ["4.5"],
-                              counterexample={"assignment": {n: fmt(v) for n, v in env.items()}, "descriptions": {},
+                              counterexample={"assignment": {n: fmt_t(v, dict(binders)[n], ch) for n, v in env.items()},
+                                              "descriptions": {},
                                               "class": "real", "replay": "confirmed"},
                               notes=notes)
     return None
@@ -452,6 +481,8 @@ def _gen(ch, rt, rng, depth):
     k = rt.kind
     if k == "Int":
         r = rng.random()
+        if rt.refs and r < 0.6:      # typy uściślone (np. Byte, Nat): wartości nieujemne i znaki ASCII
+            return rng.choice([rng.randint(0, 255), rng.choice(b"aZz09 _\n"), rng.randint(0, 10)])
         if r < 0.5:
             return rng.choice(INT_POOL[:10])
         if r < 0.9:

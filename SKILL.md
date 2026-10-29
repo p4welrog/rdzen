@@ -11,9 +11,9 @@ sprawdzenia czasu wykonania zostają tylko tam, gdzie dowodu nie znaleziono.
 
 Używaj, gdy liczy się poprawność: algorytmy na tablicach, wyszukiwanie, sortowanie, operacje
 z granicami i przepełnieniami, logika z przypadkami, drzewa i listy (typy algebraiczne,
-rekursja strukturalna, lematy indukcyjne). Nie używaj do kodu
-z napisami, plikami, siecią, liczbami zmiennoprzecinkowymi ani domknięciami — prototyp ich
-nie obsługuje; wtedy napisz zwykły kod.
+rekursja strukturalna, lematy indukcyjne). Napisy są obsługiwane jako tablice bajtów UTF-8
+(parsery, walidatory, przekształcenia tekstu). Nie używaj do kodu z plikami, siecią, liczbami
+zmiennoprzecinkowymi ani domknięciami — prototyp ich nie obsługuje; wtedy napisz zwykły kod.
 
 ## 1. Przygotowanie kompilatora
 
@@ -45,6 +45,7 @@ nie obsługuje; wtedy napisz zwykły kod.
    wymień w raporcie.
 6. **Generowanie:** `python3 ~/rdzen/rzc emit plik.rz -o modul.py`, zaimportuj moduł i wywołaj
    funkcję na przykładach. Pułapka czasu wykonania to wyjątek `RdzenTrap(kind, loc)`.
+   Napisy przekazuj przez `modul.rz_str("…")`, wynik czytaj przez `modul.py_str(b)`.
 
 ## 3. Wynik dla użytkownika
 
@@ -70,6 +71,7 @@ wykonania. Wynik to moduł Pythona (`rzc emit`).
 - Kontrakty i adnotacje pętli — każdy w osobnym wierszu, klamra ciała w osobnym wierszu.
 - Komentarze: `//`. Brak komentarzy blokowych.
 - Porównania są niełączne: `0 <= i < n` to błąd; pisz `0 <= i && i < n`.
+- `} else {` w jednym wierszu (po `}` na końcu wiersza instrukcja się kończy).
 - Nazwy wartości i funkcji małą literą, typy i konstruktory wielką.
 
 ### 2. Typy
@@ -79,16 +81,19 @@ wykonania. Wynik to moduł Pythona (`rzc emit`).
 | `Int` | 64-bitowy ze znakiem; przepełnienie to zobowiązanie `overflow` (nie zawija) |
 | `Bool`, `Unit` | `Unit` to typ funkcji bez `->` |
 | `Array<T>` | wartość (kopiowana), `xs.len`, `xs[i]` |
+| `Byte`, `Str` | `Byte = Int where 0 <= self && self < 256`, `Str = Array<Byte>` — napis to tablica bajtów UTF-8 |
 | `data T<A> { C1, C2(f: Int, g: A) }` | typy algebraiczne, mogą być rekurencyjne |
 | `data T { … } where φ` | niezmiennik typu (`self` = wartość); sprawdzany przy każdej konstrukcji, zakładany dla każdej wartości typu |
 | `T where φ` | typ uściślony, `self` oznacza wartość, np. `Int where self >= 0` |
 | `type N = …` | alias, np. `type Percent = Int where 0 <= self && self <= 100` |
 
+Literały: `"tekst\n"` (bajty UTF-8: `"ść".len == 4`; sekwencje `\n \t \r \0 \\ \" \' \u{XXXX}`),
+`b'a'` (jeden bajt, typ `Byte`). Napisy porównuje się `==`.
+
 Preludium: `Option<T> { None, Some(value: T) }`, `Result<T, E> { Ok(value: T), Err(error: E) }`,
 `Ordering { Less, Equal, Greater }`, `type Nat = Int where self >= 0`, stałe `int_min`, `int_max`.
 
-Brak w prototypie: napisów, `F64`, `Byte`, typów funkcyjnych i domknięć, `extern`, `import`,
-aktorów.
+Brak w prototypie: `F64`, typów funkcyjnych i domknięć, `extern`, `import`, aktorów.
 
 ### 3. Deklaracje
 
@@ -193,7 +198,10 @@ Każda formuła musi być **określona**: indeks w formule też musi być w zakr
 
 `compare(a, b) -> Ordering`, `min`, `max`, `contains(xs, v) -> Bool`,
 `filled(n: Nat, v) -> Array<T>`, `checked_add/sub/mul(a, b) -> Option<Int>`,
-`push(&a, v)` (wymaga `a.len < int_max`), `pop(&a) -> Option<T>`.
+`push(&a, v)` (wymaga `a.len < int_max`), `pop(&a) -> Option<T>`,
+`concat(a, b) -> Array<T>`, `slice(a, lo, hi) -> Array<T>` (wymaga `0 <= lo <= hi <= a.len`),
+`is_digit`, `is_alpha`, `is_lower`, `is_upper`, `is_space` (bajt ASCII → `Bool`).
+Czyste funkcje preludium (wszystkie poza `push`, `pop`) są dozwolone także w formułach.
 
 ### 8. Zobowiązania i reagowanie na diagnostykę
 
@@ -250,4 +258,10 @@ znaleziony kontrprzykład (zminimalizowany) jest raportowany jako błąd rzeczyw
   w każdym węźle: zmienne związane wzorcem (np. `tail`) też go spełniają.
 - Konstrukcja sprawdza także uściślenia pól: `P(x)` dla `data P { P(n: Nat) }` wymaga `x >= 0`.
 - Środek przedziału: `lo + (hi - lo) / 2` (bez przepełnienia).
+- Napisy: długość w **bajtach** (`"Cześć"` ma 7 bajtów). Zapis do `s[i]` wymaga dowodu, że
+  wartość mieści się w bajcie (np. `s[i] - 32` przy `is_lower(s[i])`). Budując napis przez `push`,
+  ogranicz długość wejścia w `requires`, bo `push` wymaga `out.len < int_max`.
+- Wartość liczbową cyfr opisuj rekurencyjną `spec fn` z wynikiem `Nat` (np. `num(s, k)`)
+  i lematem monotoniczności — wzór w `examples/strings.rz` (`parse_nat`).
+- W wygenerowanym Pythonie: `rz_str("…")` zamienia napis Pythona na `Str`, `py_str(b)` odwrotnie.
 - Przy niepewności co do kodu wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.

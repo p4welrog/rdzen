@@ -33,6 +33,38 @@ class Tok:
         return Span(self.line, self.col, self.line, self.col + max(1, len(self.text)))
 
 
+ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "0": "\0", "\\": "\\", '"': '"', "'": "'"}
+
+
+def _unescape(src, j, quote, line, col):
+    """Czyta treść literału do zamykającego cudzysłowu; zwraca (tekst, indeks za cudzysłowem)."""
+    out = []
+    n = len(src)
+    while j < n and src[j] != quote:
+        ch = src[j]
+        if ch == "\n":
+            break
+        if ch == "\\":
+            if j + 1 >= n:
+                break
+            e = src[j + 1]
+            if e in ESCAPES:
+                out.append(ESCAPES[e]); j += 2
+            elif e == "u" and j + 2 < n and src[j + 2] == "{":
+                k = src.find("}", j + 3)
+                if k < 0:
+                    raise err("E0014", Span(line, col, line, col + 1), "niezamknięta sekwencja \\u{…}", ["2.1"])
+                out.append(chr(int(src[j + 3:k], 16))); j = k + 1
+            else:
+                raise err("E0014", Span(line, col, line, col + 1), f"nieznana sekwencja ucieczki `\\{e}`", ["2.1"])
+            continue
+        out.append(ch)
+        j += 1
+    if j >= n or src[j] != quote:
+        raise err("E0012", Span(line, col, line, col + 1), "niezamknięty literał", ["2.1"])
+    return "".join(out), j + 1
+
+
 def lex(src: str) -> list:
     toks = []
     i, line, col = 0, 1, 1
@@ -56,6 +88,16 @@ def lex(src: str) -> list:
                 i += 1; col += 1
             continue
         start_col = col
+        if c == "b" and i + 1 < n and src[i + 1] == "'":
+            j = i + 2
+            chars, j = _unescape(src, j, "'", line, start_col)
+            data = chars.encode("utf-8")
+            if len(data) != 1:
+                raise err("E0013", Span(line, start_col, line, start_col + (j - i)),
+                          "literał bajtowy b'…' musi oznaczać dokładnie jeden bajt", ["2.1"])
+            toks.append(Tok("INT", src[i:j], data[0], line, start_col))
+            col += j - i; i = j
+            continue
         if c.isalpha() or c == "_":
             j = i
             while j < n and (src[j].isalnum() or src[j] == "_"):
@@ -108,16 +150,10 @@ def lex(src: str) -> list:
             col += j - i; i = j
             continue
         if c == '"':
-            j = i + 1
-            while j < n and src[j] != '"':
-                if src[j] == "\n":
-                    break
-                j += 2 if src[j] == "\\" else 1
-            if j >= n or src[j] != '"':
-                raise err("E0012", Span(line, start_col, line, start_col + 1), "niezamknięty literał napisowy", ["2.1"])
-            text = src[i:j + 1]
-            toks.append(Tok("STR", text, text[1:-1], line, start_col))
-            col += j + 1 - i; i = j + 1
+            chars, j = _unescape(src, i + 1, '"', line, start_col)
+            text = src[i:j]
+            toks.append(Tok("STR", text, list(chars.encode("utf-8")), line, start_col))
+            col += j - i; i = j
             continue
         for p in PUNCT:
             if src.startswith(p, i):

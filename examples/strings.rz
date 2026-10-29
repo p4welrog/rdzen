@@ -1,0 +1,141 @@
+// Napisy: Str = Array<Byte>, literały "…" i b'x', klasy znaków.
+
+// Wartość liczbowa pierwszych k znaków (znak niebędący cyfrą liczy się jako 0).
+spec fn num(s: Str, k: Int) -> Nat
+    decreases k
+=
+    if k <= 0 || k > s.len {
+        0
+    } else {
+        10 * num(s, k - 1) + (if is_digit(s[k - 1]) { s[k - 1] - 48 } else { 0 })
+    }
+
+spec fn all_digits(s: Str) -> Bool =
+    forall i in 0..s.len: is_digit(s[i])
+
+// Wartość prefiksu rośnie z jego długością (indukcja po s.len - i).
+lemma fn num_grows(s: Str, i: Nat)
+    requires i <= s.len
+    ensures num(s, s.len) >= num(s, i)
+    decreases s.len - i
+{
+    if i < s.len {
+        num_grows(s, i + 1)
+    }
+}
+
+fn parse_nat(s: Str) -> Option<Nat>
+    ensures match result {
+        Some(n) => s.len > 0 && all_digits(s) && n == num(s, s.len),
+        None => s.len == 0 || !all_digits(s) || num(s, s.len) > int_max,
+    }
+    examples {
+        parse_nat("2026") == Some(2026)
+        parse_nat("") == None
+        parse_nat("12a") == None
+        parse_nat("9223372036854775807") == Some(9223372036854775807)
+        parse_nat("9223372036854775808") == None
+    }
+{
+    if s.len == 0 {
+        return None
+    }
+    var n = 0
+    var i = 0
+    while i < s.len
+        invariant 0 <= i && i <= s.len
+        invariant forall k in 0..i: is_digit(s[k])
+        invariant n == num(s, i) && n >= 0
+        decreases s.len - i
+    {
+        let c = s[i]
+        if !is_digit(c) {
+            return None
+        }
+        match checked_mul(n, 10) {
+            None => {
+                num_grows(s, i + 1)
+                return None
+            },
+            Some(m) => match checked_add(m, c - b'0') {
+                None => {
+                    num_grows(s, i + 1)
+                    return None
+                },
+                Some(v) => { n = v },
+            },
+        }
+        i = i + 1
+    }
+    Some(n)
+}
+
+// Zamiana małych liter ASCII na wielkie, w miejscu.
+fn to_upper(inout s: Str)
+    ensures s.len == old(s).len
+    ensures forall k in 0..s.len:
+        (is_lower(old(s)[k]) && s[k] == old(s)[k] - 32) ||
+        (!is_lower(old(s)[k]) && s[k] == old(s)[k])
+    examples {
+        upper("Rdzeń 0.3!") == "RDZEń 0.3!"
+    }
+{
+    var i = 0
+    while i < s.len
+        invariant 0 <= i && i <= s.len
+        invariant s.len == old(s).len
+        invariant forall k in 0..i:
+            (is_lower(old(s)[k]) && s[k] == old(s)[k] - 32) ||
+            (!is_lower(old(s)[k]) && s[k] == old(s)[k])
+        invariant forall k in i..s.len: s[k] == old(s)[k]
+        decreases s.len - i
+    {
+        if is_lower(s[i]) {
+            s[i] = s[i] - 32
+        }
+        i = i + 1
+    }
+}
+
+fn upper(s: Str) -> Str {
+    var t = s
+    to_upper(&t)
+    t
+}
+
+// Usunięcie białych znaków z obu końców.
+fn trim(s: Str) -> Str
+    ensures result.len <= s.len
+    ensures result.len == 0 || (!is_space(result[0]) && !is_space(result[result.len - 1]))
+    ensures exists a in 0..s.len + 1: a + result.len <= s.len &&
+        (forall k in 0..result.len: result[k] == s[a + k])
+    examples {
+        trim("  ab c \n") == "ab c"
+        trim("   ") == ""
+    }
+{
+    var lo = 0
+    while lo < s.len && is_space(s[lo])
+        invariant 0 <= lo && lo <= s.len
+        decreases s.len - lo
+    {
+        lo = lo + 1
+    }
+    var hi = s.len
+    while hi > lo && is_space(s[hi - 1])
+        invariant lo <= hi && hi <= s.len
+        decreases hi - lo
+    {
+        hi = hi - 1
+    }
+    slice(s, lo, hi)
+}
+
+fn greet(name: Str) -> Str
+    ensures result.len == name.len + 9      // „Cześć, ” to 9 bajtów UTF-8
+    examples {
+        greet("Paweł") == "Cześć, Paweł"
+    }
+{
+    concat("Cześć, ", name)
+}

@@ -4,6 +4,8 @@ data Result<T, E> { Ok(value: T), Err(error: E) }
 data Ordering { Less, Equal, Greater }
 
 type Nat = Int where self >= 0
+type Byte = Int where 0 <= self && self < 256
+type Str = Array<Byte>
 
 const int_max: Int = 0x7FFF_FFFF_FFFF_FFFF
 const int_min: Int = -int_max - 1

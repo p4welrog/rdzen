@@ -56,6 +56,8 @@ def _show(e, sub):
         return f"{e.name}(" + ", ".join(("&" + a.inout) if a.inout else show(a.expr, sub) for a in e.args) + ")"
     if isinstance(e, CtorCall):
         return e.name + ("(" + ", ".join(show(a, sub) for a in e.args) + ")" if e.args else "")
+    if isinstance(e, StrLit):
+        return e.text
     if isinstance(e, ArrayLit):
         return "[" + ", ".join(show(a, sub) for a in e.items) + "]"
     if isinstance(e, Quant):

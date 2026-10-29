@@ -186,6 +186,8 @@ class Interp:
             if e.callee is not None and not e.callee.builtin:
                 return self.call_fn(e.callee, args, e.span, targs=e.targs or {})[0]
             return self.builtin_pure(e.name, args)
+        if isinstance(e, ArrayLit):
+            return [F(x) for x in e.items]
         if isinstance(e, CtorCall):
             return Ctor(e.name, [F(a) for a in e.args])
         if isinstance(e, Match):
@@ -283,6 +285,17 @@ class Interp:
         return True
 
     def builtin_pure(self, n, args):
+        if n in ("is_digit", "is_alpha", "is_lower", "is_upper", "is_space"):
+            c = args[0]
+            return {"is_digit": 48 <= c <= 57, "is_lower": 97 <= c <= 122, "is_upper": 65 <= c <= 90,
+                    "is_alpha": 65 <= c <= 90 or 97 <= c <= 122, "is_space": c in (32, 9, 10, 13)}[n]
+        if n == "concat":
+            return copy.deepcopy(args[0]) + copy.deepcopy(args[1])
+        if n == "slice":
+            a, lo, hi = args
+            if not (0 <= lo <= hi <= len(a)):
+                raise Violation("wd", ("wd", None), None, "slice poza zakresem w formule")
+            return copy.deepcopy(a[lo:hi])
         if n == "compare":
             a, b = args
             return Ctor("Less" if a < b else "Equal" if a == b else "Greater", [])
@@ -414,6 +427,8 @@ class Interp:
                 return Ctor("Some", [a.pop()]) if a else Ctor("None", [])
             if n == "filled" and vals[0] < 0:
                 raise Violation("pre", ("pre", e.span, e.span), e.span)
+            if n == "slice" and not (0 <= vals[1] <= vals[2] <= len(vals[0])):
+                raise Violation("pre", ("pre", e.span, e.span), e.span, f"slice({vals[1]}, {vals[2]}) dla długości {len(vals[0])}")
             return self.builtin_pure(n, vals)
         res, outs = self.call_fn(sig, vals, e.span, targs=e.targs or {})
         k = 0

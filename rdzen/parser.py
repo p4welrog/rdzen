@@ -505,7 +505,8 @@ class Parser:
         if t.kind == "match":
             return self.match_expr()
         if t.kind == "STR":
-            raise err("E0003", t.span, "napisy nie są obsługiwane w prototypie", ["3.1"])
+            self.adv()
+            return StrLit([IntLit(b, t.span) for b in t.value], t.span, t.text)
         found = "koniec wiersza" if (t.kind == ";" and t.implicit) else (t.text or t.kind)
         raise err("E0002", t.span, f"oczekiwano wyrażenia, znaleziono `{found}`", ["2.3"])
 

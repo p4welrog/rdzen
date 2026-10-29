@@ -63,6 +63,14 @@ def _rank(v):
     base = type(v).__mro__[1]
     return 1 + sum(_rank(getattr(v, f)) for f in v._fields if isinstance(getattr(v, f), base))
 
+def rz_str(s):
+    """Napis Pythona → wartość typu Str (bajty UTF-8)."""
+    return list(s.encode("utf-8"))
+
+def py_str(b):
+    """Wartość typu Str → napis Pythona."""
+    return bytes(b).decode("utf-8", errors="replace")
+
 def _cp(v):
     if isinstance(v, list):
         return [_cp(x) for x in v]
@@ -243,6 +251,20 @@ class Emitter:
         return f"_rank({v})" if e.ty is not None and e.ty.kind == "Data" else v
 
     def builtin(self, n, a):
+        if n == "is_digit":
+            return f"(48 <= {a[0]} <= 57)"
+        if n == "is_lower":
+            return f"(97 <= {a[0]} <= 122)"
+        if n == "is_upper":
+            return f"(65 <= {a[0]} <= 90)"
+        if n == "is_alpha":
+            return f"(65 <= {a[0]} <= 90 or 97 <= {a[0]} <= 122)"
+        if n == "is_space":
+            return f"({a[0]} in (32, 9, 10, 13))"
+        if n == "concat":
+            return f"({a[0]} + {a[1]})"
+        if n == "slice":
+            return f"{a[0]}[{a[1]}:{a[2]}]"
         if n == "compare":
             return f"_compare({a[0]}, {a[1]})"
         if n == "min":
@@ -441,6 +463,16 @@ class Emitter:
                 return t
             if e.name == "filled" and self.need(("pre", e.span, e.span)):
                 self.w(f"_check({vals[0]} >= 0, 'pre', {self.loc(e.span)})")
+            if e.name == "slice" and self.need(("pre", e.span, e.span)):
+                ts = []
+                for v in vals:
+                    if not _atomic(v):
+                        t = self.fresh()
+                        self.w(f"{t} = {v}")
+                        v = t
+                    ts.append(v)
+                vals = ts
+                self.w(f"_check(0 <= {vals[1]} <= {vals[2]} <= len({vals[0]}), 'pre', {self.loc(e.span)})")
             return self.builtin(e.name, vals)
         # argumenty do zmiennych, jeśli potrzebne są sprawdzenia warunków wstępnych
         decl = sig.decl
