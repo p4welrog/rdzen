@@ -205,6 +205,6 @@ znaleziony kontrprzykład (zminimalizowany) jest raportowany jako błąd rzeczyw
   wartość mieści się w bajcie (np. `s[i] - 32` przy `is_lower(s[i])`). Budując napis przez `push`,
   ogranicz długość wejścia w `requires`, bo `push` wymaga `out.len < int_max`.
 - Wartość liczbową cyfr opisuj rekurencyjną `spec fn` z wynikiem `Nat` (np. `num(s, k)`)
-  i lematem monotoniczności — wzór w `examples/strings.rz` (`parse_nat`).
+  i lematem monotoniczności — wzór w `~/rdzen/examples/strings.rz` (`parse_nat`).
 - W wygenerowanym Pythonie: `rz_str("…")` zamienia napis Pythona na `Str`, `py_str(b)` odwrotnie.
 - Przy niepewności co do kodu wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.
