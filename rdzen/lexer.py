@@ -6,7 +6,7 @@ from .ast import Span
 from .diag import err
 
 KEYWORDS = set("""actor as assert break const continue data decreases else ensures
-examples exists extern false fn for forall if import in inout invariant let match
+examples exists extern false fn for forall if import in inout invariant lemma let match
 old partial pub receives recv requires result return self send spawn spec true type
 var where while""".split())
 

@@ -1,0 +1,2 @@
+// expect: E3013
+spec fn f(n: Int) -> Bool = if n <= 0 { true } else { f(n - 1) }

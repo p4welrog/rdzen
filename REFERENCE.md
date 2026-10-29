@@ -31,7 +31,7 @@ Preludium: `Option<T> { None, Some(value: T) }`, `Result<T, E> { Ok(value: T), E
 `Ordering { Less, Equal, Greater }`, `type Nat = Int where self >= 0`, stałe `int_min`, `int_max`.
 
 Brak w prototypie: napisów, `F64`, `Byte`, typów funkcyjnych i domknięć, operatora `?`,
-`extern`, `import`, aktorów, `data … where`, rekurencyjnych `spec fn`.
+`extern`, `import`, aktorów, `data … where`.
 
 ## 3. Deklaracje
 
@@ -40,6 +40,25 @@ const limit: Int = 1000
 
 spec fn sorted(xs: Array<Int>) -> Bool =
     forall i in 0..xs.len: forall j in i..xs.len: xs[i] <= xs[j]
+
+spec fn size(t: Tree) -> Nat            // rekurencyjna: wymaga `decreases`
+    decreases t
+=
+    match t { Leaf => 0, Node(l, _, r) => 1 + size(l) + size(r) }
+
+lemma fn lt_not_mem(t: Tree, b: Int, k: Int)   // dowód indukcyjny, wymazywany z kodu
+    requires all_lt(t, b) && k >= b
+    ensures !mem(t, k)
+    decreases t
+{
+    match t {
+        Leaf => { },
+        Node(l, _, r) => {
+            lt_not_mem(l, b, k)        // hipoteza indukcyjna dla poddrzew
+            lt_not_mem(r, b, k)
+        },
+    }
+}
 
 fn name<T>(a: Int, inout buf: Array<T>) -> Option<Nat>
     requires a >= 0
@@ -59,8 +78,16 @@ fn name<T>(a: Int, inout buf: Array<T>) -> Option<Nat>
   (oraz `old(x)` w niezmiennikach i `assert`). `old` dotyczy parametrów `inout`.
 - Funkcje są domyślnie **totalne**: każda pętla `while` wymaga `decreases`, rekursja wymaga
   `decreases` na funkcji. `partial fn` zwalnia z tego, ale funkcja totalna nie może wołać częściowej.
-- `spec fn` — czysta, nierekurencyjna formuła; używalna w kontraktach, niezmiennikach i `examples`,
-  nie w kodzie.
+- `spec fn` — czysta funkcja logiczna o dowolnym typie wyniku; używalna w kontraktach,
+  niezmiennikach i `examples`, nie w kodzie. Rekurencyjna (także wzajemnie) wymaga `decreases`;
+  jej spadek miary, określoność ciała i uściślenie wyniku (np. `-> Nat`) są dowodzone, a uściślenie
+  wyniku jest potem dostępne przy każdym wywołaniu.
+- `decreases m`: `m` typu `Int` (nieujemne, maleje) albo wartość typu danych — porządek
+  strukturalny: wywołanie rekurencyjne lub kolejny obrót pętli musi dostać ścisłą podstrukturę
+  (np. `l` z `Node(l, x, r)`, `t` z `Cons(_, t)`).
+- `lemma fn` — funkcja-dowód: bez wyniku i `inout`, totalna; jej `ensures` jest twierdzeniem
+  dostępnym po wywołaniu. Wywołania lematów są usuwane z kodu wynikowego, dlatego wszystkie
+  zobowiązania lematu muszą być udowodnione (brak sprawdzeń dynamicznych).
 
 ## 4. Instrukcje i wyrażenia
 
@@ -126,13 +153,17 @@ Każda formuła musi być **określona**: indeks w formule też musi być w zakr
 | W4200 | solver nie rozstrzygnął | uprość formułę; zostaje sprawdzenie dynamiczne |
 | E4300 / E4310 | przykład / test właściwości | kod albo przykład jest zły |
 | E5001 | niewyczerpujący `match` | dodaj brakujący przypadek |
-| E3010 / E3011 | pętla / rekursja bez `decreases` | |
+| E3010 / E3011 / E3013 | pętla / rekursja / rekurencyjna `spec fn` bez `decreases` | |
+| E4043 | miara rekurencyjnej `spec fn` może nie maleć | argument wywołania musi być podstrukturą |
+| E3014 | lemat z wynikiem lub `inout` | |
 | H7001 | dziura `?nazwa` | raport: typ, cel, hipotezy, kandydaci |
 
 Kontrprzykład **rzeczywisty** (odtworzony w interpreterze) = błąd w kodzie lub w specyfikacji.
 Kontrprzykład **indukcyjny** (wartości opisane „po pętli z wiersza N” lub „wynik wywołania”) =
 stan może być nieosiągalny: niezmiennik pętli albo `ensures` wywoływanej funkcji jest za słaby.
 Diagnostyka podaje, które zapisywane zmienne nie występują w niezmienniku.
+Gdy solver nie rozstrzygnie zobowiązania, kompilator próbuje je obalić testowaniem losowym;
+znaleziony kontrprzykład (zminimalizowany) jest raportowany jako błąd rzeczywisty.
 
 ## 9. Idiomy
 
@@ -145,6 +176,12 @@ Diagnostyka podaje, które zapisywane zmienne nie występują w niezmienniku.
   Suma tablicy `Nat` może się przepełnić — sam niezmiennik `s >= 0` nie wystarczy.
 - Funkcja wywoływana jest znana **tylko przez kontrakt** — `ensures` musi mówić wszystko,
   czego potrzebuje wywołujący (także o długościach tablic `inout`).
-- Rekursja: `decreases n` z parametrem `Nat`, który maleje w każdym wywołaniu.
+- Rekursja: `decreases n` z parametrem `Nat` albo `decreases t` dla drzew i list.
+- **Z3 nie przeprowadza indukcji.** Własność wymagająca indukcji (np. „wszystkie klucze w `t`
+  są `< b`, więc `k >= b` nie występuje w `t`”) wymaga lematu, którego ciało wywołuje siebie na
+  podstrukturach; w miejscu użycia wywołaj lemat przed instrukcją, która tej własności potrzebuje.
+- Rozwijanie definicji rekurencyjnych o jeden poziom solver robi sam: `size(Node(l, x, r))`
+  jest znane jako `1 + size(l) + size(r)` bez lematu.
+- Uściślenie wyniku `spec fn` (np. `-> Nat`) daje fakty typu `size(t) >= 0` za darmo.
 - Środek przedziału: `lo + (hi - lo) / 2` (bez przepełnienia).
 - Przy niepewności co do kodu wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.

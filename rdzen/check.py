@@ -224,6 +224,7 @@ class Checker:
                         raise err("E2003", it.expr.span, "stała poza zakresem `Int`", ["3.1"])
                 elif isinstance(it, SpecFn):
                     it.rparams = [(p.name, self.resolve(p.type, it.tparams), False) for p in it.params]
+                    it.rret = self.resolve(it.ret, it.tparams)
                     self.specs[it.name] = it
                 elif isinstance(it, FnDecl):
                     if it.name in self.fns:
@@ -256,25 +257,29 @@ class Checker:
     # ---------- główna procedura ----------
     def run(self):
         self.collect()
-        # rekurencyjne funkcje specyfikacyjne (§6.1) — poza zakresem prototypu
-        deps = {n: {c.name for c in walk(sf.body) if isinstance(c, Call) and c.name in self.specs}
+        # rekurencyjne funkcje specyfikacyjne (§6.1): silnie spójne składowe grafu wywołań
+        deps = {n: {c.name for c in walk([sf.body, sf.decreases]) if isinstance(c, Call) and c.name in self.specs}
                 for n, sf in self.specs.items()}
         def reach(a, b, seen):
             for c in deps[a]:
                 if c == b or (c not in seen and (seen.add(c) or reach(c, b, seen))):
                     return True
             return False
-        for n, sf in list(self.specs.items()):
-            if reach(n, n, set()):
-                self.error(err("E6106", sf.span, f"rekurencyjna funkcja specyfikacyjna `{n}` nie jest obsługiwana w prototypie", ["6.1"],
-                               notes=["wyraź własność kwantyfikatorem ograniczonym albo funkcją nierekurencyjną"]))
-                del self.specs[n]
+        self.spec_scc = {}
+        for n, sf in self.specs.items():
+            sf.recursive = reach(n, n, set())
+            self.spec_scc[n] = frozenset(m for m in self.specs if m == n or (reach(n, m, set()) and reach(m, n, set())))
+            if sf.recursive and sf.decreases is None:
+                self.error(err("E3013", sf.span, f"rekurencyjna funkcja specyfikacyjna `{n}` wymaga miary `decreases`", ["6.1"],
+                               notes=["np. `decreases t` dla parametru typu danych albo `decreases n` dla `Nat`"]))
         for it in self.items:
             if isinstance(it, SpecFn):
                 try:
                     env = {n: VarInfo(t, "param") for n, t, _ in it.rparams}
-                    t = self.infer(it.body, env, Ctx(None, formula=True), BOOL)
-                    self.expect_ty(it.body, t, BOOL)
+                    t = self.infer(it.body, env, Ctx(None, formula=True), it.rret.bare())
+                    self.expect_ty(it.body, t, it.rret.bare())
+                    if it.decreases is not None:
+                        self.check_measure(it.decreases, env, Ctx(None, formula=True))
                 except CompileError as e:
                     self.error(e)
         for f in self.user_fns:
@@ -305,7 +310,10 @@ class Checker:
         for r in f.ensures:
             self.expect_ty(r, self.infer(r, env, Ctx(sig, formula=True, allow_result=True, allow_old=True), BOOL), BOOL)
         if f.decreases is not None:
-            self.expect_ty(f.decreases, self.infer(f.decreases, env, Ctx(sig, formula=True), INT), INT)
+            self.check_measure(f.decreases, env, Ctx(sig, formula=True))
+        if f.lemma:
+            if any(p[2] for p in sig.params) or f.ret is not None:
+                raise err("E3014", f.span, "lemat nie może mieć parametrów `inout` ani wyniku", ["5.3"])
         for ex in f.examples:
             eenv = {}
             if ex.binders:
@@ -319,6 +327,13 @@ class Checker:
         if sig.ret.kind != "Unit" and not same(body_ty, sig.ret):
             raise err("E2010", f.body.span, "typ wartości ciała funkcji nie zgadza się z typem wyniku",
                       ["5.3"], expected=str(sig.ret), found=str(body_ty))
+
+    def check_measure(self, e, env, ctx):
+        """Miara: `Int` albo wartość typu danych (porządek strukturalny, ranga)."""
+        t = self.infer(e, env, ctx, None)
+        if t.kind not in ("Int", "Data"):
+            raise err("E2014", e.span, "miara `decreases` musi być typu `Int` albo typem danych", ["5.3"], found=str(t))
+        return t
 
     # ---------- pomocnicze ----------
     def expect_ty(self, node, got: RT, want: RT):
@@ -403,7 +418,7 @@ class Checker:
                 self.expect_ty(inv, self.infer(inv, fenv, Ctx(ctx.fn, formula=True, allow_old=True), BOOL), BOOL)
             if isinstance(s, While):
                 if s.decreases is not None:
-                    self.expect_ty(s.decreases, self.infer(s.decreases, fenv, Ctx(ctx.fn, formula=True), INT), INT)
+                    self.check_measure(s.decreases, fenv, Ctx(ctx.fn, formula=True))
                 elif ctx.fn and not ctx.fn.partial:
                     raise err("E3010", s.span, "pętla bez `decreases` w funkcji totalnej", ["5.3"],
                               notes=["dodaj wariant `decreases t` albo oznacz funkcję jako `partial`"])
@@ -620,9 +635,14 @@ class Checker:
                 t = self.infer(a.expr, env, ctx, pt if not sf.tparams else None)
                 if not unify(pt.bare(), t, s, set(sf.tparams)):
                     raise err("E2011", a.span, "niezgodność typu argumentu", ["5.2"], expected=str(pt), found=str(t))
+            if expected is not None:
+                unify(sf.rret.bare(), expected, s, set(sf.tparams))
+            missing = [p for p in sf.tparams if p not in s]
+            if missing:
+                raise err("E2012", e.span, f"nie można wywnioskować argumentu typowego `{missing[0]}` dla `{e.name}`", ["5.5"])
             e.callee = sf
             e.targs = s
-            return BOOL
+            return subst_rt(sf.rret, s).bare()
         sig = self.fns.get(e.name)
         if sig is None:
             raise err("E1012", e.span, f"nieznana funkcja `{e.name}`", ["5.2"])

@@ -102,13 +102,13 @@ def main(argv):
         print(__doc__)
         return 2
     if argv[1] == "check":
-        rl = 4_000_000
+        rl = 1_000_000
         if "--rlimit" in argv:
             rl = int(argv[argv.index("--rlimit") + 1])
         return cmd_check(argv[2], "--json" in argv, rl)
     if argv[1] == "emit":
         out = argv[argv.index("-o") + 1] if "-o" in argv else None
-        return cmd_emit(argv[2], out, 4_000_000)
+        return cmd_emit(argv[2], out, 1_000_000)
     return cmd_run(argv[2], argv[3], argv[4:])
 
 

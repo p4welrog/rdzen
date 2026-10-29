@@ -3,6 +3,7 @@
 przykłady/właściwości → diagnostyka (rozdz. 9)."""
 from __future__ import annotations
 import random
+import copy
 import zlib
 import z3
 
@@ -103,7 +104,7 @@ class Result:
         self.checker = None
 
 
-def compile_source(src: str, run_examples=True, rlimit=4_000_000) -> Result:
+def compile_source(src: str, run_examples=True, rlimit=1_000_000) -> Result:
     res = Result()
     prog, ch, diags = load(src)
     res.diags += diags
@@ -132,13 +133,33 @@ def compile_source(src: str, run_examples=True, rlimit=4_000_000) -> Result:
         if worst.status == "proved":
             counts["proved"] += 1
             continue
+        if fn not in fns:          # funkcja specyfikacyjna: brak sprawdzeń dynamicznych
+            counts["refuted"] += 1
+            res.diags.append(spec_diag(worst, ch, ver))
+            continue
         if worst.status == "unknown":
+            d = falsify(worst, ch, fns[fn])
+            if d is not None:
+                counts["refuted"] += 1
+                res.diags.append(d)
+                continue
+            if fns[fn].lemma:        # lematy są wymazywane — brak sprawdzeń dynamicznych
+                counts["refuted"] += 1
+                res.diags.append(Diagnostic(CODE[worst.kind], "error", worst.span, MSG[worst.kind], SPEC[worst.kind],
+                                            obligation=_obj(worst, "unknown"),
+                                            notes=["solver nie rozstrzygnął zobowiązania w lemacie; lematy są wymazywane, "
+                                                   "więc każde ich zobowiązanie musi być udowodnione"],
+                                            label=worst.label or f"zobowiązanie {worst.kind}: {worst.text}"))
+                continue
             counts["unknown"] += 1
             res.diags.append(Diagnostic("W4200", "warning", worst.span,
                                         f"nie rozstrzygnięto zobowiązania `{worst.kind}` — w programie wykonywalnym pozostanie sprawdzenie dynamiczne",
                                         ["6.6"], obligation=_obj(worst, "unknown")))
             continue
         d, status = refuted_diag(worst, ch, ver, fns[fn])
+        if fns[fn].lemma and d.severity != "error":
+            d.severity, d.code, status = "error", CODE[worst.kind], "refuted"
+            d.notes.append("lematy są wymazywane, więc każde ich zobowiązanie musi być udowodnione")
         counts[status] += 1
         res.diags.append(d)
 
@@ -239,6 +260,68 @@ def refuted_diag(o, ch, ver, fdecl):
                                    "class": cls, "replay": replay},
                    notes=notes, label=o.label or f"zobowiązanie {o.kind}: {o.text}")
     return d, status
+
+
+def falsify(o, ch, fdecl, tries=300):
+    """Zobowiązanie nierozstrzygnięte przez solver: próba obalenia testowaniem losowym
+    (wejścia spełniające warunki wstępne, wykonanie w interpreterze ze sprawdzeniami)."""
+    sig = fdecl.sig
+    if sig.tparams:
+        return None
+    rng = random.Random(zlib.crc32(f"{o.fn}/{o.key}".encode()))
+    binders = [(pn, pt) for pn, pt, _ in sig.params]
+
+    def failing(env):
+        try:
+            Interp(ch, budget=200_000).call_fn(sig, [copy.deepcopy(env[pn]) for pn, _ in binders], None)
+        except Violation as v:
+            if v.key == o.key:
+                return f"naruszenie `{v.kind}` w wierszu {v.span.line}"
+            return False
+        except (BudgetExceeded, HoleHit, RecursionError):
+            return False
+        return False
+
+    for case in range(tries):
+        env = {}
+        for pn, pt in binders:
+            v = gen_value(ch, pt, rng, env)
+            if v is _FAIL:
+                break
+            env[pn] = v
+        if len(env) != len(binders):
+            continue
+        if failing(env):
+            env = shrink(ch, binders, env, failing)
+            return Diagnostic(CODE[o.kind], "error", o.span, MSG[o.kind], SPEC[o.kind],
+                              obligation=_obj(o, "refuted"),
+                              counterexample={"assignment": {n: fmt(v) for n, v in env.items()}, "descriptions": {},
+                                              "class": "real", "replay": "confirmed"},
+                              notes=["solver nie rozstrzygnął zobowiązania; kontrprzykład znaleziono testowaniem losowym "
+                                     f"(przypadek {case + 1} z {tries})"],
+                              label=o.label or f"zobowiązanie {o.kind}: {o.text}")
+    return None
+
+
+def spec_diag(o, ch, ver):
+    sf = ch.specs[o.fn]
+    code = {"term": "E4043", "post": "E4020"}.get(o.kind, "E4070")
+    msg = {"term": "miara rekurencyjnej funkcji specyfikacyjnej może nie maleć",
+           "post": "wynik funkcji specyfikacyjnej może nie spełniać uściślenia typu"}.get(
+        o.kind, "ciało funkcji specyfikacyjnej może być nieokreślone")
+    assignment = {}
+    if o.model is not None:
+        for pn, pt, _ in sf.rparams:
+            try:
+                assignment[pn] = fmt(model_value(o.model, z3.Const(pn, ver.enc.sort(pt))))
+            except NotReplayable:
+                pass
+    notes = ["funkcje specyfikacyjne nie mają sprawdzeń dynamicznych — zobowiązanie musi być udowodnione"]
+    if o.status == "unknown":
+        notes.insert(0, "solver nie rozstrzygnął zobowiązania")
+    ce = {"assignment": assignment, "descriptions": {}, "class": "real", "replay": "not-replayable"} if assignment else None
+    return Diagnostic(code, "error", o.span, msg, ["6.1"], obligation=_obj(o, o.status),
+                      counterexample=ce, notes=notes, label=f"zobowiązanie {o.kind}: {o.text}")
 
 
 def hole_diag(e, st, ctx, ver):
@@ -432,7 +515,7 @@ def _shrinks(v):
                 out.append(v[:i] + [s] + v[i + 1:])
         return out
     if isinstance(v, Ctor):
-        out = []
+        out = [fv for fv in v.fields if isinstance(fv, Ctor)]     # zastąpienie poddrzewem
         for i, fv in enumerate(v.fields):
             for s in _shrinks(fv):
                 f2 = list(v.fields)

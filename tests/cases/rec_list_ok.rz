@@ -1,0 +1,79 @@
+// expect: ok
+data List { Nil, Cons(head: Int, tail: List) }
+
+spec fn len(l: List) -> Nat
+    decreases l
+=
+    match l { Nil => 0, Cons(_, t) => 1 + len(t) }
+
+spec fn even(n: Nat) -> Bool
+    decreases n
+=
+    if n == 0 { true } else { odd(n - 1) }
+
+spec fn odd(n: Nat) -> Bool
+    decreases n
+=
+    if n == 0 { false } else { even(n - 1) }
+
+fn length(l: List) -> Nat
+    requires len(l) <= 1000
+    ensures result == len(l)
+    examples {
+        length(Cons(1, Cons(2, Nil))) == 2
+    }
+{
+    var cur = l
+    var n = 0
+    while cur != Nil
+        invariant n >= 0 && n + len(cur) == len(l)
+        decreases cur
+    {
+        match cur {
+            Nil => { },
+            Cons(_, t) => {
+                cur = t
+                n = n + 1
+            },
+        }
+    }
+    n
+}
+
+fn sum(l: List) -> Int
+    requires len(l) <= 1000
+    requires forall_le(l, 1000)
+    ensures -1000 * len(l) <= result && result <= 1000 * len(l)
+    decreases l
+{
+    match l {
+        Nil => 0,
+        Cons(h, t) => h + sum(t),
+    }
+}
+
+spec fn forall_le(l: List, b: Int) -> Bool
+    decreases l
+=
+    match l { Nil => true, Cons(h, t) => -b <= h && h <= b && forall_le(t, b) }
+
+fn parity(n: Nat) -> Bool
+    ensures result == even(n)
+    decreases n
+{
+    if n == 0 {
+        true
+    } else {
+        even_not_odd(n - 1)
+        !parity(n - 1)
+    }
+}
+
+lemma fn even_not_odd(n: Nat)
+    ensures even(n) == !odd(n)
+    decreases n
+{
+    if n > 0 {
+        even_not_odd(n - 1)
+    }
+}

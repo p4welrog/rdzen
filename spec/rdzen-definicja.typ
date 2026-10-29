@@ -100,7 +100,7 @@
   #v(0.3em)
   #text(size: 14pt)[Formalna definicja języka programowania]
   #v(0.6em)
-  #text(size: 11pt)[Wersja 0.1 — szkic normatywny]
+  #text(size: 11pt)[Wersja 0.2 — szkic normatywny]
   #v(0.4em)
   #text(size: 10pt, style: "italic")[29 października 2026]
   #v(2.5cm)
@@ -182,7 +182,7 @@ hole    = "?" [a-z_] [a-zA-Z0-9_]*    (* dziury *)
 ```
 actor  as  assert  break  const  continue  data  decreases  else  ensures
 examples  exists  extern  false  fn  for  forall  if  import  in  inout
-invariant  let  match
+invariant  lemma  let  match
 old  partial  pub  receives  recv  requires  result  return  self  send  spawn  spec
 true  type  var  where  while
 ```
@@ -232,11 +232,11 @@ ctor        = Tident [ "(" field { "," field } ")" ] ;
 field       = ident ":" type ;
 type_decl   = "type" Tident [ tparams ] "=" type ";" ;
 const_decl  = "const" ident ":" type "=" expr ";" ;   (* wyrażenie stałe *)
-spec_decl   = "spec" "fn" ident [ tparams ] "(" [ params ] ")" "->" "Bool"
-              "=" formula ";" ;
+spec_decl   = "spec" "fn" ident [ tparams ] "(" [ params ] ")" "->" type [ ";" ]
+              [ "decreases" term [ ";" ] ] "=" formula ";" ;
 extern_decl = "extern" "fn" ident "(" [ params ] ")" [ "->" type ]
               "!" effects [ ";" ] { contract } ;
-fn_decl     = [ "partial" ] "fn" ident [ tparams ] "(" [ params ] ")"
+fn_decl     = [ "partial" | "lemma" ] "fn" ident [ tparams ] "(" [ params ] ")"
               [ "->" type ] [ "!" effects ] [ ";" ]
               { contract } [ examples [ ";" ] ] block ;
 params      = param { "," param } ;
@@ -802,7 +802,7 @@ przemienność i idempotentność $union$ (zmienne efektowe traktowane jak stał
   jest poprawna ($tack.r f "ok"$), gdy:
   + $overline(alpha), overline(rho) ; overline(x) : overline(tau), overline(m) : "mut" overline(sigma), "ret" : tau_r tack.r e : tau_r ! epsilon'$ oraz $epsilon' subset.eq epsilon_f$;
   + $overline(x) : overline(tau), overline(m) : "mut" overline(sigma) tack.r_F P$ oraz $overline(x) : overline(tau), overline(m) : "mut" overline(sigma), old(overline(m)) : overline(sigma), "result" : tau_r tack.r_F Q$;
-  + jeśli $f$ leży w nietrywialnej silnie spójnej składowej grafu wywołań (lub wywołuje sama siebie) i $"Div" in.not epsilon_f$, to $t != bot$ i $tack.r_F t : "Int"$;
+  + jeśli $f$ leży w nietrywialnej silnie spójnej składowej grafu wywołań (lub wywołuje sama siebie) i $"Div" in.not epsilon_f$, to $t != bot$ oraz $tack.r_F t : "Int"$ albo $tack.r_F t : T chevron.l overline(tau) chevron.r$ (miara strukturalna, §6.4);
   + jeśli $f$ jest zadeklarowana bez słowa `partial`, to $"Div" in.not epsilon_f$.
 ]
 
@@ -813,6 +813,14 @@ efekt jest jawnie wypisywany przez narzędzia (np. w podpowiedziach i dokumentac
 
 Z punktu 4 i reguły T-Sub wynika, że *funkcja totalna nie może wywołać funkcji częściowej*:
 efekt $"Div"$ wywołanej funkcji musiałby zawierać się w $epsilon_f$.
+
+*Lematy.* Deklaracja `lemma fn` jest funkcją totalną bez parametrów `inout`, o typie wyniku
+`Unit` i efekcie $emptyset$ (błąd `E3014` w przeciwnym razie). Jej warunek końcowy jest twierdzeniem
+dostępnym w miejscu wywołania (reguła wywołania z §6.4); rekurencyjne wywołania w ciele lematu
+pełnią rolę hipotezy indukcyjnej. Przekształcenie $cal(R)$ (§6.6) usuwa wywołania lematów i ich
+definicje z programu wykonywalnego; jest to poprawne, bo lemat jest totalny i nie ma efektów,
+pod warunkiem że wszystkie jego zobowiązania mają status `proved` — dlatego zobowiązanie lematu
+o statusie innym niż `proved` jest błędem kompilacji, a nie sprawdzeniem dynamicznym.
 
 == Prawo wyłączności
 
@@ -904,10 +912,26 @@ $m$ oznacza jej *bieżącą* wartość; $old(m)$ — wartość przy wejściu do 
 i niezmiennikach pętli); $"result"$ — wynik (tylko w `ensures`). Zapis konkretny
 `forall k in a..b: φ` oznacza $forall k in [a, b). phi$.
 
-*Funkcje specyfikacyjne* są czyste i totalne. Funkcja specyfikacyjna nierekurencyjna jest
-w warunkach weryfikacji *rozwijana* (makro logiczne). Rekurencyjna musi mieć `decreases`,
-którego zobowiązanie `term` ma status `proved` (inaczej błąd `E4043`), i jest w logice symbolem nieinterpretowanym z aksjomatem definicyjnym ograniczonym do
-wystąpień w danej formule (rozwinięcie o ustaloną głębokość $d = 2$).
+*Funkcje specyfikacyjne* są czyste i totalne; typ wyniku jest dowolnym typem dozwolonym
+w formułach (także uściślonym). Funkcja specyfikacyjna nierekurencyjna jest w warunkach
+weryfikacji *rozwijana* (makro logiczne). Funkcja należąca do nietrywialnej silnie spójnej
+składowej grafu wywołań funkcji specyfikacyjnych (*rekurencyjna*, także wzajemnie) musi mieć
+`decreases` (błąd `E3013`) i jest w logice *funkcją definiowaną rekurencyjnie*: symbolem
+$s$ z aksjomatem $forall overline(x). s(overline(x)) = b_s (overline(x))$, który procedura decyzyjna
+rozwija leniwie. Dla każdej takiej funkcji powstają zobowiązania (błąd przy statusie innym niż
+`proved`, bo funkcje specyfikacyjne nie mają sprawdzeń dynamicznych):
+
+- `wd` — ciało jest określone dla każdego argumentu spełniającego uściślenia parametrów;
+- `term` (`E4043`) — w każdym wywołaniu w obrębie składowej, przy warunkach ścieżki
+  (gałęzie `match` i `if`, lewy argument `&&`/`||`, zakres kwantyfikatora), miara argumentów
+  jest nieujemna i mniejsza niż miara parametrów;
+- `post` — jeśli typ wyniku jest uściślony, ciało spełnia uściślenie przy *hipotezie indukcyjnej*
+  $forall overline(y). mu(overline(y)) < mu(overline(x)) and H(overline(y)) => h(s(overline(y)), tau_r)$
+  dla wszystkich funkcji składowej.
+
+Po udowodnieniu uściślenie wyniku jest dodawane do pozostałych warunków weryfikacji jako aksjomat
+$forall overline(x). H(overline(x)) => h(s(overline(x)), tau_r)$ (wzorzec: $s(overline(x))$).
+Poprawność wynika z indukcji dobrze ufundowanej po mierze (zobowiązania `term`).
 
 #definicja(title: [fragment rozstrzygalny $F_0$])[
   $F_0 subset F$ to formuły bez mnożenia zmiennych przez zmienne, bez rekurencyjnych funkcji
@@ -1085,6 +1109,19 @@ z ich wartościami przy wejściu, a $t^0$ — wartość miary przy wejściu — 
 
 Program jest *zweryfikowany*, gdy $tack.r.double VC_kappa (f)$ dla każdego zobowiązania $kappa$ każdej funkcji $f$.
 
+=== Miary
+
+Miara `decreases t` (funkcji, pętli lub funkcji specyfikacyjnej) jest termem typu `Int` albo
+typu danych $T chevron.l overline(tau) chevron.r$. Dla typu danych miarą jest *ranga*:
+
+$ "rank"_T (C(v_1, dots, v_n)) = 1 + sum_(i : tau_i = T chevron.l overline(tau) chevron.r) "rank"_T (v_i) $
+
+czyli liczba węzłów wartości wzdłuż pól tego samego typu. Ranga jest dodatnia, więc warunek
+nieujemności jest spełniony trywialnie (procedura decyzyjna otrzymuje aksjomat
+$forall x. "rank"_T (x) >= 1$), a warunek spadku $"rank"(t') < "rank"(t)$ zachodzi dla każdej ścisłej
+podstruktury: argument wywołania rekurencyjnego musi być polem (lub polem pola) wartości
+dopasowanej do parametru. Spadek rangi jest dobrze ufundowany, bo wartości są drzewami skończonymi.
+
 == Rodzaje zobowiązań
 
 #table(
@@ -1098,7 +1135,7 @@ Program jest *zweryfikowany*, gdy $tack.r.double VC_kappa (f)$ dla każdego zobo
   [`inv-pres`], [zachowanie niezmiennika przez obrót pętli], [tak], [E4031],
   [`var-nn`], [nieujemność wariantu], [tak], [E4040],
   [`var-dec`], [spadek wariantu], [tak], [E4041],
-  [`term`], [spadek miary w wywołaniu rekurencyjnym], [tak], [E4042],
+  [`term`], [spadek miary w wywołaniu rekurencyjnym (funkcja / funkcja specyfikacyjna)], [tak], [E4042 / E4043],
   [`refine`], [uściślenie przy wiązaniu lub przypisaniu], [tak], [E4050],
   [`data-inv`], [niezmiennik typu danych przy konstrukcji], [tak], [E4051],
   [`assert`], [instrukcja `assert`], [tak], [E4060],
@@ -1157,14 +1194,14 @@ Dla każdego zobowiązania $kappa$ z formułą $phi_kappa$:
   stroke: 0.4pt + luma(200),
   [*Wynik*], [*Skutek*],
   [Valid], [Status `proved`. Węzeł $"assert"[kappa]$ jest usuwany; dla zobowiązań niejawnych sprawdzenie dynamiczne (granic, przepełnienia, dzielenia) jest *eliminowane* z kodu.],
-  [Unknown], [Status `unknown`. Węzeł zastępowany przez $"check"[kappa] phi_kappa$ (dla niejawnych zostaje sprawdzenie dynamiczne). Ostrzeżenie `W4200` z listą „niedowiedzionych obietnic”.],
+  [Unknown], [Najpierw *próba obalenia testowaniem*: deterministycznie generowane wejścia spełniające warunki wstępne (ziarno wyznaczone z identyfikatora zobowiązania) są wykonywane w interpreterze; naruszenie tego samego zobowiązania daje status `refuted` z kontrprzykładem rzeczywistym (zminimalizowanym). W przeciwnym razie status `unknown`: węzeł zastępowany przez $"check"[kappa] phi_kappa$ (dla niejawnych zostaje sprawdzenie dynamiczne), ostrzeżenie `W4200` z listą „niedowiedzionych obietnic”. W funkcjach specyfikacyjnych i lematach `unknown` jest błędem.],
   [Invalid, rzeczywisty], [Status `refuted`. Błąd kompilacji o kodzie z tabeli §6.5.],
   [Invalid, indukcyjny, jawne], [Status `refuted`. Błąd kompilacji.],
   [Invalid, indukcyjny, niejawne], [Status `refuted-inductive`. Ostrzeżenie `W4400`, sprawdzenie dynamiczne pozostaje.],
 )
 
-Wymienione przekształcenie oznaczamy $cal(R)$. Program wykonywalny to $cal(R)(cal(E)(P))$; nie zawiera
-on węzłów $"assert"$ ani $"hole"$. Domyślny budżet $beta$ jest stałą kompilatora; zmiana budżetu
+Wymienione przekształcenie oznaczamy $cal(R)$; usuwa ono ponadto definicje i wywołania lematów.
+Program wykonywalny to $cal(R)(cal(E)(P))$; nie zawiera on węzłów $"assert"$ ani $"hole"$. Domyślny budżet $beta$ jest stałą kompilatora; zmiana budżetu
 może jedynie zamienić `unknown` na `proved` lub `refuted` (S4).
 
 == Zaufana baza
@@ -1451,7 +1488,8 @@ jest wskazane w raporcie kompilacji.
   spójnej składowej zmniejszają miarę lub kończą się pułapką. Wywoływane funkcje spoza składowej
   są totalne z założenia indukcyjnego po porządku topologicznym grafu składowych. `recv` ma
   efekt $"Div"$, więc nie występuje. Zatem miara leksykograficzna (pozycja w porządku
-  topologicznym, miara wywołania, miary pętli) maleje dobrze ufundowanie.]
+  topologicznym, miara wywołania, miary pętli) maleje dobrze ufundowanie; dla miar strukturalnych
+  ranga jest liczbą naturalną malejącą przy przejściu do podstruktury (§6.4).]
 
 #twierdzenie(title: "wykonywalność kontraktów")[
   Dla każdej formuły $phi in F$ i każdego wartościowania jej zmiennych wolnych spełniającego

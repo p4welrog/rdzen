@@ -70,6 +70,7 @@ class FnDecl(Node):
     pub: bool
     span: Span = NOSPAN
     builtin: bool = False
+    lemma: bool = False
 
 
 @dataclass(eq=False)
@@ -103,6 +104,8 @@ class SpecFn(Node):
     params: list
     body: Node
     span: Span = NOSPAN
+    ret: Optional[Node] = None
+    decreases: Optional[Node] = None
 
 
 @dataclass(eq=False)

@@ -208,6 +208,22 @@ class Interp:
             return F(els.stmts[0].expr if isinstance(els, Block) else els)
         raise NotImplementedError(type(e).__name__)
 
+    def measure(self, v, rt):
+        """Miara jak w weryfikatorze: Int bez zmian, typ danych → ranga."""
+        if rt is not None and rt.kind == "Data" and isinstance(v, Ctor):
+            return self.rank(v, rt.bare())
+        return v
+
+    def rank(self, v, rt):
+        d = self.ch.data[rt.name]
+        sub = dict(zip(d.tparams, rt.args))
+        fields = dict(d.rctors)[v.name]
+        r = 1
+        for (fn, ft), fv in zip(fields, v.fields):
+            if subst_rt(ft, sub).bare().shape() == rt.shape():
+                r += self.rank(fv, rt)
+        return r
+
     def field(self, rt, name, v):
         d = self.ch.data[rt.name]
         cname, fields = d.rctors[0]
@@ -402,13 +418,13 @@ class Interp:
                 fr = self.frames[-1]
                 scc = self.ch.scc.get(fr.decl.name, frozenset())
                 if fr.t0 is not None and decl.name in scc:
-                    t = self.formula(decl.decreases, penv, decl.decreases, call_span)
+                    t = self.measure(self.formula(decl.decreases, penv, decl.decreases, call_span), decl.decreases.ty)
                     if not (0 <= t < fr.t0):
                         raise Violation("term", ("term", call_span), call_span, f"miara {t}, przy wejściu {fr.t0}")
         old = {k: copy.deepcopy(v) for k, v in penv.items()}
         t0 = None
         if decl.decreases is not None and not decl.partial:
-            t0 = self.formula(decl.decreases, penv, decl.decreases, decl.span)
+            t0 = self.measure(self.formula(decl.decreases, penv, decl.decreases, decl.span), decl.decreases.ty)
         self.frames.append(Frame(decl, t0, old))
         if len(self.frames) > 2000:
             raise BudgetExceeded()
@@ -490,7 +506,7 @@ class Interp:
                     break
                 t0 = None
                 if s.decreases is not None:
-                    t0 = self.formula(s.decreases, env, s.decreases, s.span)
+                    t0 = self.measure(self.formula(s.decreases, env, s.decreases, s.span), s.decreases.ty)
                     if t0 < 0:
                         raise Violation("var-nn", ("var-nn", s.decreases.span, s.span), s.decreases.span, f"wariant = {t0}")
                 try:
@@ -503,7 +519,7 @@ class Interp:
                     if not self.formula(inv, env, inv, s.span, old=old):
                         raise Violation("inv-pres", ("inv-pres", inv.span, s.span), inv.span)
                 if t0 is not None:
-                    t = self.formula(s.decreases, env, s.decreases, s.span)
+                    t = self.measure(self.formula(s.decreases, env, s.decreases, s.span), s.decreases.ty)
                     if not t < t0:
                         raise Violation("var-dec", ("var-dec", s.decreases.span, s.span), s.decreases.span, f"{t0} → {t}")
             return

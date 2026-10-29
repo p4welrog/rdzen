@@ -59,6 +59,10 @@ def _tdiv(a, b, loc=None):
 def _trem(a, b, loc=None):
     return a - b * _tdiv(a, b, loc)
 
+def _rank(v):
+    base = type(v).__mro__[1]
+    return 1 + sum(_rank(getattr(v, f)) for f in v._fields if isinstance(getattr(v, f), base))
+
 def _cp(v):
     if isinstance(v, list):
         return [_cp(x) for x in v]
@@ -233,6 +237,11 @@ class Emitter:
             return f"({th} if {F(e.cond)} else {F(els)})"
         raise Unsupported(f"formuła {type(e).__name__}")
 
+    def m(self, e, env):
+        """Miara jako liczba: typ danych → ranga strukturalna."""
+        v = self.f(e, env)
+        return f"_rank({v})" if e.ty is not None and e.ty.kind == "Data" else v
+
     def builtin(self, n, a):
         if n == "compare":
             return f"_compare({a[0]}, {a[1]})"
@@ -390,6 +399,8 @@ class Emitter:
 
     def call(self, e):
         sig = e.callee
+        if getattr(getattr(sig, "decl", None), "lemma", False):
+            return "None"          # lematy są wymazywane (całkowite, bez efektów)
         if e.name in self.ch.specs:
             return f"_spec_{e.name}(" + ", ".join(self.seq([a.expr for a in e.args])) + ")"
         vals = self.seq([a.expr for a in e.args if a.inout is None], bind=True)
@@ -434,7 +445,7 @@ class Emitter:
             if self.need(("pre", q.span, e.span)):
                 self.w(f"_check({self.f(q, penv)}, 'pre', {self.loc(e.span)})")
         if self.need(("term", e.span)):
-            self.w(f"_check(0 <= {self.f(decl.decreases, penv)} < _t0, 'term', {self.loc(e.span)})")
+            self.w(f"_check(0 <= {self.m(decl.decreases, penv)} < _t0, 'term', {self.loc(e.span)})")
         call = f"{esc(e.name)}(" + ", ".join(args) + ")"
         inouts = [a.inout for a in e.args if a.inout]
         if not inouts:
@@ -682,14 +693,14 @@ class Emitter:
         if pres:
             self.loop_checks(s.invariants, s.span, "inv-pres")
         if t0 is not None and self.need(("var-dec", s.decreases.span, s.span)):
-            self.w(f"_check({self.f(s.decreases, self.fenv())} < {t0}, 'var-dec', {self.loc(s.decreases.span)})")
+            self.w(f"_check({self.m(s.decreases, self.fenv())} < {t0}, 'var-dec', {self.loc(s.decreases.span)})")
         self.ind -= 1
 
     def loop_body(self, s, oneshot, flag, dec, pres):
         t0 = None
         if dec:
             t0 = self.fresh("v")
-            self.w(f"{t0} = {self.f(s.decreases, self.fenv())}")
+            self.w(f"{t0} = {self.m(s.decreases, self.fenv())}")
             if self.need(("var-nn", s.decreases.span, s.span)):
                 self.w(f"_check({t0} >= 0, 'var-nn', {self.loc(s.decreases.span)})")
         self.loops.append({"oneshot": oneshot, "flag": flag})
@@ -777,7 +788,7 @@ class Emitter:
                     self.w(f"{o} = _cp({self.lookup(pn)[0]})")
                     self.olds[pn] = o
         if f.decreases is not None and not f.partial and any(k[0] == f.name and k[1][0] == "term" for k in self.unproved):
-            self.w(f"_t0 = {self.f(f.decreases, self.fenv())}")
+            self.w(f"_t0 = {self.m(f.decreases, self.fenv())}")
         last = f.body.stmts[-1] if f.body.stmts else None
         site = last.span if isinstance(last, ExprStmt) else f.body.span
         self.block(f.body, ("return", site))
@@ -813,7 +824,8 @@ class Emitter:
             self.w(f"    return {self.f(sf.body, env)}")
             self.w("")
         for f in self.ch.user_fns:
-            self.function(f)
+            if not f.lemma:
+                self.function(f)
         return "\n".join(self.out) + "\n"
 
 

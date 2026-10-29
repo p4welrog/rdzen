@@ -1,0 +1,13 @@
+// expect: E4020, E4020
+data List { Nil, Cons(head: Int, tail: List) }
+
+spec fn len(l: List) -> Nat
+    decreases l
+=
+    match l { Nil => 0, Cons(_, t) => len(t) - 1 }
+
+lemma fn wrong(l: List)
+    ensures len(l) == 0
+    decreases l
+{
+}

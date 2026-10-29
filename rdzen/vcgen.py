@@ -171,7 +171,7 @@ def mark_tail_expr(e):
 
 
 class Verifier:
-    def __init__(self, checker, rlimit=4_000_000):
+    def __init__(self, checker, rlimit=1_000_000):
         self.ch = checker
         self.enc = Enc(checker)
         self.obs: list = []
@@ -180,6 +180,13 @@ class Verifier:
         self.rlimit = rlimit
         self.cur: Optional[FnCtx] = None
         self.loops_by_line = {}
+        Verifier._count = getattr(Verifier, "_count", 0) + 1
+        self.uid = Verifier._count  # unikalne nazwy funkcji rekurencyjnych we wspólnym kontekście Z3
+        self.recfuns = {}          # (spec, typy) -> RecFunction
+        self.ranks = {}            # kształt typu danych -> funkcja rangi
+        self.axioms = []           # rank(x) >= 1
+        self.spec_axioms = {}      # spec -> [∀ args. uściślenia parametrów ⇒ uściślenie wyniku]
+        self.exclude = frozenset() # specyfikacje, których aksjomatów nie wolno użyć (dowód indukcyjny)
         self.tsub = {}             # podstawienie typów przy tłumaczeniu kontraktów funkcji generycznych
 
     def T(self, rt):
@@ -262,6 +269,15 @@ class Verifier:
                 t, wa = self.tr(a.expr, env, fx)
                 args.append(t)
                 w = z3.And(w, wa)
+            if e.name in self.ch.specs and getattr(self.ch.specs[e.name], "recursive", False):
+                sf = self.ch.specs[e.name]
+                targs = {k: self.T(v) for k, v in (e.targs or {}).items()}
+                f = self.recfun(sf, targs)
+                penv = {p[0]: v for p, v in zip(sf.rparams, args)}
+                conds = []
+                for (pn, pt, _), v in zip(sf.rparams, args):
+                    conds += self.enc.hyp(v, subst_rt(pt, targs), self.refine_fn(penv), refs_only=True)
+                return f(*args), z3.And(w, *conds)
             if e.name in self.ch.specs:
                 sf = self.ch.specs[e.name]
                 penv = {p[0]: v for p, v in zip(sf.rparams, args)}
@@ -378,8 +394,10 @@ class Verifier:
     def ob(self, kind, st: State, phi, key, span, text, site=None, label=None, loop_info=None, assume=True):
         if st is None:
             return None
-        self.obs.append(Ob(kind, key, span, site or span, text, phi, st.pc, st.inductive,
-                           self.cur.decl.name, label, loop_info))
+        o = Ob(kind, key, span, site or span, text, phi, st.pc, st.inductive,
+               self.cur.decl.name, label, loop_info)
+        o.exclude = self.exclude
+        self.obs.append(o)
         return st.assume(phi) if assume else st
 
     # ================= wyrażenia =================
@@ -611,6 +629,7 @@ class Verifier:
         # terminacja
         if self.cur.t0 is not None and sig.name in self.cur.scc:
             tf, _ = self.tr(decl.decreases, cenv, Fx())
+            tf = self.measure(tf, decl.decreases.ty)
             s = self.ob("term", s, z3.And(tf >= 0, tf < self.cur.t0), ("term", e.span), e.span,
                         f"0 <= {show(decl.decreases)} < {show(self.cur.decl.decreases)} (przy wejściu)")
         # wynik i wartości inout po wywołaniu
@@ -778,6 +797,7 @@ class Verifier:
             t0 = None
             if s.decreases is not None:
                 t, wd = self.tr(s.decreases, sb.env, fx)
+                t = self.measure(t, s.decreases.ty)
                 sb = self.ob("wd", sb, wd, ("wd", s.decreases.span, s.span), s.decreases.span, "wariant jest określony", site=s.span)
                 t0 = self.enc.fresh("t0", INT)
                 sb = sb.assume(t0 == t)
@@ -795,6 +815,7 @@ class Verifier:
                                  loop_info=info)
                 if t0 is not None:
                     t, _ = self.tr(s.decreases, se.env, fx)
+                    t = self.measure(t, s.decreases.ty)
                     self.ob("var-dec", se, t < t0, ("var-dec", s.decreases.span, s.span), s.decreases.span,
                             f"{show(s.decreases)} maleje", site=s.span)
             out.outs.append((sc.assume(z3.Not(c), f"!({show(s.cond)})"), self.enc.unit()))
@@ -901,7 +922,7 @@ class Verifier:
         if f.decreases is not None and not f.partial:
             t, wd = self.tr(f.decreases, env, Fx())
             st = self.ob("wd", st, wd, ("wd", f.decreases.span, f.span), f.decreases.span, "miara jest określona", site=f.span)
-            ctx.t0 = t
+            ctx.t0 = self.measure(t, f.decreases.ty)
         # dobra określoność ensures
         if f.ensures:
             rv = self.enc.fresh("result", sig.ret)
@@ -924,7 +945,179 @@ class Verifier:
         for s, v in r.outs:
             self.post(s, v, site)
 
+    # ================= miary i rekurencyjne funkcje specyfikacyjne =================
+    def measure(self, term, rt):
+        rt = self.T(rt)
+        if rt is not None and rt.kind == "Data":
+            return self.rank(rt)(term)
+        return term
+
+    def rank(self, rt):
+        """Ranga wartości typu danych: 1 + suma rang pól tego samego typu (porządek strukturalny)."""
+        rt = rt.bare()
+        key = rt.shape()
+        if key in self.ranks:
+            return self.ranks[key]
+        srt = self.enc.sort(rt)
+        f = z3.RecFunction(f"rank[{rt}]#{self.uid}", srt, z3.IntSort())
+        self.ranks[key] = f
+        x = z3.Const(f"x!rank{len(self.ranks)}", srt)
+        d = self.ch.data[rt.name]
+        sub = dict(zip(d.tparams, rt.args))
+        body = None
+        for cname, fields in reversed(d.rctors):
+            parts = [z3.IntVal(1)]
+            for j, (fn_, ft) in enumerate(fields):
+                if subst_rt(ft, sub).bare().shape() == key:
+                    parts.append(f(self.enc.field(rt, cname, j, x)))
+            val = z3.Sum(*parts) if len(parts) > 1 else parts[0]
+            body = val if body is None else z3.If(self.enc.is_ctor(rt, cname, x), val, body)
+        z3.RecAddDefinition(f, [x], body)
+        y = z3.Const(f"y!rank{len(self.ranks)}", srt)
+        self.axioms.append(z3.ForAll([y], f(y) >= 1, patterns=[f(y)]))
+        return f
+
+    def recfun(self, sf, targs):
+        key = (sf.name, tuple(sorted((k, v.bare().shape()) for k, v in targs.items())))
+        if key in self.recfuns:
+            return self.recfuns[key]
+        dom = [self.enc.sort(subst_rt(pt, targs)) for _, pt, _ in sf.rparams]
+        rng = self.enc.sort(subst_rt(sf.rret, targs))
+        tag = ",".join(str(v) for _, v in sorted(targs.items()))
+        f = z3.RecFunction(sf.name + (f"<{tag}>" if tag else "") + f"#{self.uid}", *dom, rng)
+        self.recfuns[key] = f
+        params = [z3.Const(f"{pn}!{sf.name}", s) for (pn, _, _), s in zip(sf.rparams, dom)]
+        saved = self.tsub
+        self.tsub = dict(targs)
+        try:
+            body, _ = self.tr(sf.body, {pn: p for (pn, _, _), p in zip(sf.rparams, params)}, Fx())
+        finally:
+            self.tsub = saved
+        z3.RecAddDefinition(f, params, body)
+        rret = subst_rt(sf.rret, targs)
+        if _all_refs(rret):
+            xs = [z3.Const(f"{pn}!ax{sf.name}", s) for (pn, _, _), s in zip(sf.rparams, dom)]
+            penv = {pn: x for (pn, _, _), x in zip(sf.rparams, xs)}
+            pre = []
+            for (pn, pt, _), x in zip(sf.rparams, xs):
+                pre += self.enc.hyp(x, subst_rt(pt, targs), self.refine_fn(penv), refs_only=True)
+            post = self.enc.hyp(f(*xs), rret, self.refine_fn(penv), refs_only=True)
+            ax = z3.ForAll(xs, z3.Implies(z3.And(*pre), z3.And(*post)), patterns=[f(*xs)])
+            self.spec_axioms.setdefault(sf.name, []).append(ax)
+        return f
+
+    def verify_spec(self, sf):
+        """Zobowiązania rekurencyjnej funkcji specyfikacyjnej: określoność ciała i spadek miary."""
+        self.cur = FnCtx(sf, None)
+        env, tys = {}, {}
+        for pn, pt, _ in sf.rparams:
+            env[pn] = z3.Const(pn, self.enc.sort(pt))
+            tys[pn] = pt
+        st = State(env, (), False, tys, ())
+        hyps = []
+        for pn, pt, _ in sf.rparams:
+            hyps += self.enc.hyp(env[pn], pt, self.refine_fn(env))
+        if hyps:
+            st = st.assume(z3.And(*hyps))
+        t0, _ = self.tr(sf.decreases, env, Fx())
+        t0 = self.measure(t0, sf.decreases.ty)
+        scc = self.ch.spec_scc.get(sf.name, frozenset())
+        self.exclude = scc
+        # hipoteza indukcyjna: uściślenia wyników dla wywołań o mniejszej mierze
+        for g in scc:
+            gs = self.ch.specs[g]
+            if not _all_refs(gs.rret) or gs.decreases is None:
+                continue
+            f = self.recfun(gs, {})
+            xs = [z3.Const(f"{pn}!ih{g}", self.enc.sort(pt)) for pn, pt, _ in gs.rparams]
+            penv = {pn: x for (pn, _, _), x in zip(gs.rparams, xs)}
+            pre = []
+            for (pn, pt, _), x in zip(gs.rparams, xs):
+                pre += self.enc.hyp(x, pt, self.refine_fn(penv), refs_only=True)
+            m, _ = self.tr(gs.decreases, penv, Fx())
+            m = self.measure(m, gs.decreases.ty)
+            post = self.enc.hyp(f(*xs), gs.rret, self.refine_fn(penv), refs_only=True)
+            st = st.assume(z3.ForAll(xs, z3.Implies(z3.And(m < t0, *pre), z3.And(*post)), patterns=[f(*xs)]))
+        body_t, wd = self.tr(sf.body, env, Fx())
+        if _all_refs(sf.rret):
+            conds = self.enc.hyp(body_t, sf.rret, self.refine_fn(env), refs_only=True)
+            txt = " && ".join(show(x, {"self": "wynik"}) for x in _all_refs(sf.rret))
+            self.ob("post", st, z3.And(*conds), ("post", sf.ret.span, sf.span), sf.ret.span, txt, site=sf.span)
+        self.ob("wd", st, wd, ("wd", sf.body.span, sf.span), sf.body.span,
+                f"ciało `{sf.name}` jest określone dla wszystkich argumentów", site=sf.span)
+        scc = self.ch.spec_scc.get(sf.name, frozenset())
+
+        def walk_(e, env, st):
+            if isinstance(e, Call) and e.name in scc:
+                args = [self.tr(a.expr, env, Fx())[0] for a in e.args]
+                callee = self.ch.specs[e.name]
+                cenv = {pn: v for (pn, _, _), v in zip(callee.rparams, args)}
+                m, _ = self.tr(callee.decreases, cenv, Fx())
+                m = self.measure(m, callee.decreases.ty)
+                self.ob("term", st, z3.And(m >= 0, m < t0), ("term", e.span), e.span,
+                        f"0 <= {show(callee.decreases)} < {show(sf.decreases)} (przy wejściu)")
+                for a in e.args:
+                    walk_(a.expr, env, st)
+                return
+            if isinstance(e, Match):
+                walk_(e.expr, env, st)
+                v, _ = self.tr(e.expr, env, Fx())
+                rest = st
+                for arm in e.arms:
+                    cond, binds = self.pat(arm.pattern, v, self.T(e.expr.ty))
+                    env2 = dict(env)
+                    env2.update(binds)
+                    sa = rest.assume(cond)
+                    if arm.guard is not None:
+                        walk_(arm.guard, env2, sa)
+                        g, _ = self.tr(arm.guard, env2, Fx())
+                        walk_(arm.body, env2, sa.assume(g))
+                        rest = rest.assume(z3.Not(z3.And(cond, g)))
+                    else:
+                        walk_(arm.body, env2, sa)
+                        rest = rest.assume(z3.Not(cond))
+                return
+            if isinstance(e, If):
+                walk_(e.cond, env, st)
+                c, _ = self.tr(e.cond, env, Fx())
+                walk_(e.then.stmts[0].expr, env, st.assume(c))
+                els = e.els.stmts[0].expr if isinstance(e.els, Block) else e.els
+                walk_(els, env, st.assume(z3.Not(c)))
+                return
+            if isinstance(e, Binary) and e.op in ("&&", "||"):
+                walk_(e.left, env, st)
+                a, _ = self.tr(e.left, env, Fx())
+                walk_(e.right, env, st.assume(a if e.op == "&&" else z3.Not(a)))
+                return
+            if isinstance(e, Quant):
+                walk_(e.lo, env, st)
+                walk_(e.hi, env, st)
+                lo, _ = self.tr(e.lo, env, Fx())
+                hi, _ = self.tr(e.hi, env, Fx())
+                k = z3.Int(f"{e.var}!t{id(e) % 100000}")
+                env2 = dict(env)
+                env2[e.var] = k
+                walk_(e.body, env2, st.assume(z3.And(lo <= k, k < hi)))
+                return
+            for k_, v_ in vars(e).items():
+                if k_ in ("span", "ty", "callee", "targs"):
+                    continue
+                for n in (v_ if isinstance(v_, list) else [v_]):
+                    if isinstance(n, Arg):
+                        n = n.expr
+                    if isinstance(n, Node) and not isinstance(n, (Pattern, Block)):
+                        walk_(n, env, st)
+
+        walk_(sf.body, env, st)
+        self.exclude = frozenset()
+
     def run(self):
+        for sf in self.ch.specs.values():
+            if getattr(sf, "recursive", False) and sf.decreases is not None:
+                try:
+                    self.verify_spec(sf)
+                except z3.Z3Exception as ex:
+                    raise err("E4999", sf.span, f"błąd wewnętrzny kodowania SMT: {ex}", [])
         for f in self.ch.user_fns:
             try:
                 self.verify_fn(f)
@@ -938,6 +1131,8 @@ class Verifier:
         s = z3.Solver()
         s.set("rlimit", self.rlimit)
         s.set("random_seed", 0)
+        for ax in self.axioms_for(o.exclude):
+            s.add(ax)
         for c in o.pc:
             s.add(c)
         s.add(z3.Not(o.phi))
@@ -952,6 +1147,13 @@ class Verifier:
                 o.model = small
         else:
             o.status = "unknown"
+
+    def axioms_for(self, exclude):
+        out = list(self.axioms)
+        for name, axs in self.spec_axioms.items():
+            if name not in exclude:
+                out += axs
+        return out
 
     def small_model(self, s, exprs):
         """Próba znalezienia kontrprzykładu o małych wartościach (czytelność diagnostyki)."""
@@ -982,6 +1184,8 @@ class Verifier:
     def check_valid(self, pc, phi):
         s = z3.Solver()
         s.set("rlimit", self.rlimit)
+        for ax in self.axioms_for(frozenset()):
+            s.add(ax)
         for c in pc:
             s.add(c)
         s.add(z3.Not(phi))

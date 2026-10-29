@@ -35,7 +35,9 @@ referencji.
 ## Zakres prototypu
 
 Obsługiwane: `Int`, `Bool`, `Unit`, `Array<T>`, typy danych (także generyczne
-i rekurencyjne), aliasy z uściśleniami (`type Nat = Int where self >= 0`), stałe, `spec fn`,
+i rekurencyjne), aliasy z uściśleniami (`type Nat = Int where self >= 0`), stałe, `spec fn`
+(także rekurencyjne i wzajemnie rekurencyjne, z uściślonym wynikiem), `lemma fn`, miary
+strukturalne (`decreases t` dla typów danych),
 funkcje z `requires`/`ensures`/`decreases`/`examples`, parametry `inout` z prawem wyłączności,
 `let`/`var`, przypisania, `while` z niezmiennikami i wariantem, `for`, `if`, `match`
 ze strażnikami, `break`/`continue`/`return`, `assert`, dziury `?h`, kwantyfikatory ograniczone,
@@ -43,11 +45,17 @@ ze strażnikami, `break`/`continue`/`return`, `assert`, dziury `?h`, kwantyfikat
 
 Zobowiązania: `pre`, `post`, `inv-init`, `inv-pres`, `var-nn`, `var-dec`, `term`, `refine`,
 `assert`, `wd`, `bounds`, `overflow`, `div0`. Kontrprzykłady są odtwarzane w interpreterze
-i klasyfikowane jako rzeczywiste lub indukcyjne (§6.6).
+i klasyfikowane jako rzeczywiste lub indukcyjne (§6.6). Zobowiązania nierozstrzygnięte przez
+solver są dodatkowo obalane testowaniem losowym.
+
+Rekurencyjne `spec fn` są kodowane jako funkcje rekurencyjne Z3 (`RecFunction`); miara
+strukturalna to ranga wartości (1 + suma rang pól tego samego typu). Uściślenie wyniku
+rekurencyjnej `spec fn` jest dowodzone indukcyjnie (hipoteza dla wywołań o mniejszej mierze)
+i dodawane jako aksjomat dla pozostałych zobowiązań.
 
 Nieobsługiwane (błąd `E0003`/`E2002`): napisy, `Byte`, `F64`, typy funkcyjne i domknięcia,
 operator `?`, kapabilności i efekty poza totalnością, aktorzy, `extern`, `import`,
-niezmienniki typów danych (`data … where`), rekurencyjne `spec fn` (`E6106`),
+niezmienniki typów danych (`data … where`),
 sprawdzanie formy kanonicznej (`E0100`), generowanie kodu C (zamiast niego: Python).
 
 ## Różnice względem specyfikacji

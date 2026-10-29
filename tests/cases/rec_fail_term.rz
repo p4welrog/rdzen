@@ -1,0 +1,13 @@
+// expect: E4043, E4042
+data Tree { Leaf, Node(left: Tree, right: Tree) }
+
+spec fn bad(t: Tree) -> Bool
+    decreases t
+=
+    match t { Leaf => true, Node(l, r) => bad(t) }
+
+fn loop_(t: Tree) -> Int
+    decreases t
+{
+    match t { Leaf => 0, Node(l, r) => loop_(Node(r, l)) }
+}

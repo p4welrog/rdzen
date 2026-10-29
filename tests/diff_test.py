@@ -30,7 +30,7 @@ def pystr(v):
 
 def run_file(path, tmp):
     src = open(path, encoding="utf-8").read()
-    res = compile_source(src, run_examples=False, rlimit=int(os.environ.get("RLIMIT", 4_000_000)))
+    res = compile_source(src, run_examples=False, rlimit=int(os.environ.get("RLIMIT", 1_000_000)))
     if any(d.severity in ("error", "hole") for d in res.diags):
         return None
     try:
@@ -46,6 +46,8 @@ def run_file(path, tmp):
     stats = {"zgodne": 0, "pułapki": 0, "pominięte": 0}
     rng = random.Random(1234)
     for f in ch.user_fns:
+        if f.lemma:
+            continue
         sig = f.sig
         pyf = getattr(mod, f.name if f.name not in ("min", "max") else f.name + "_")
         for _ in range(N):

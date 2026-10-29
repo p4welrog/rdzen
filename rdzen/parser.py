@@ -58,7 +58,7 @@ class Parser:
 
     def item(self):
         pub = self.accept("pub")
-        if self.at("fn", "partial"):
+        if self.at("fn", "partial", "lemma"):
             return self.fn_decl(pub)
         if self.at("data"):
             return self.data_decl()
@@ -104,7 +104,8 @@ class Parser:
 
     def fn_decl(self, pub):
         start = self.t.span
-        partial = self.accept("partial")
+        lemma = self.accept("lemma")
+        partial = False if lemma else self.accept("partial")
         self.expect("fn")
         name = self.expect("IDENT", "nazwy funkcji").text
         tps = self.tparams()
@@ -133,8 +134,10 @@ class Parser:
             examples = self.examples()
             self.skip_semis()
         body = self.block()
-        return FnDecl(name, tps, params, ret, requires, ensures, decreases, examples,
-                      body, partial, pub, sp(start, body.span))
+        f = FnDecl(name, tps, params, ret, requires, ensures, decreases, examples,
+                   body, partial, pub, sp(start, body.span))
+        f.lemma = lemma
+        return f
 
     def examples(self):
         self.expect("examples")
@@ -212,10 +215,15 @@ class Parser:
         params = self.params()
         self.expect("->")
         ret = self.type_()
+        self.skip_semis()
+        dec = None
+        if self.accept("decreases"):
+            dec = self.expr()
+            self.skip_semis()
         self.expect("=")
         self.skip_semis()
         body = self.expr()
-        return SpecFn(name, tps, params, body, sp(start, body.span))
+        return SpecFn(name, tps, params, body, sp(start, body.span), ret, dec)
 
     def const_decl(self):
         start = self.expect("const").span

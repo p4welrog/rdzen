@@ -1,0 +1,31 @@
+// expect: ok
+data Tree { Leaf, Node(left: Tree, right: Tree) }
+data List { Nil, Cons(head: Int, tail: List) }
+
+fn balanced_leaves(t: Tree) -> Bool
+    decreases t
+{
+    match t {
+        Leaf => true,
+        Node(l, r) => balanced_leaves(l) && balanced_leaves(r),
+    }
+}
+
+fn all_pos(l: List) -> Bool {
+    var cur = l
+    var ok = true
+    while cur != Nil
+        decreases cur
+    {
+        match cur {
+            Nil => { },
+            Cons(h, t) => {
+                if h <= 0 {
+                    ok = false
+                }
+                cur = t
+            },
+        }
+    }
+    ok
+}

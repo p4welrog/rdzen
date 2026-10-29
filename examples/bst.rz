@@ -1,0 +1,105 @@
+data Tree { Leaf, Node(left: Tree, key: Int, right: Tree) }
+
+spec fn mem(t: Tree, k: Int) -> Bool
+    decreases t
+=
+    match t {
+        Leaf => false,
+        Node(l, x, r) => x == k || mem(l, k) || mem(r, k),
+    }
+
+spec fn all_lt(t: Tree, b: Int) -> Bool
+    decreases t
+=
+    match t {
+        Leaf => true,
+        Node(l, x, r) => x < b && all_lt(l, b) && all_lt(r, b),
+    }
+
+spec fn all_gt(t: Tree, b: Int) -> Bool
+    decreases t
+=
+    match t {
+        Leaf => true,
+        Node(l, x, r) => x > b && all_gt(l, b) && all_gt(r, b),
+    }
+
+spec fn is_bst(t: Tree) -> Bool
+    decreases t
+=
+    match t {
+        Leaf => true,
+        Node(l, x, r) => all_lt(l, x) && all_gt(r, x) && is_bst(l) && is_bst(r),
+    }
+
+spec fn size(t: Tree) -> Nat
+    decreases t
+=
+    match t {
+        Leaf => 0,
+        Node(l, x, r) => 1 + size(l) + size(r),
+    }
+
+lemma fn gt_not_mem(t: Tree, b: Int, k: Int)
+    requires all_gt(t, b) && k <= b
+    ensures !mem(t, k)
+    decreases t
+{
+    match t {
+        Leaf => { },
+        Node(l, x, r) => {
+            gt_not_mem(l, b, k)
+            gt_not_mem(r, b, k)
+        },
+    }
+}
+
+lemma fn lt_not_mem(t: Tree, b: Int, k: Int)
+    requires all_lt(t, b) && k >= b
+    ensures !mem(t, k)
+    decreases t
+{
+    match t {
+        Leaf => { },
+        Node(l, x, r) => {
+            lt_not_mem(l, b, k)
+            lt_not_mem(r, b, k)
+        },
+    }
+}
+
+fn bst_contains(t: Tree, k: Int) -> Bool
+    requires is_bst(t)
+    ensures result == mem(t, k)
+    decreases t
+    examples {
+        bst_contains(Node(Node(Leaf, 1, Leaf), 3, Node(Leaf, 5, Leaf)), 5)
+        !bst_contains(Node(Node(Leaf, 1, Leaf), 3, Node(Leaf, 5, Leaf)), 4)
+    }
+{
+    match t {
+        Leaf => false,
+        Node(l, x, r) => {
+            if k == x {
+                true
+            } else if k < x {
+                gt_not_mem(r, x, k)
+                bst_contains(l, k)
+            } else {
+                lt_not_mem(l, x, k)
+                bst_contains(r, k)
+            }
+        },
+    }
+}
+
+fn count(t: Tree) -> Nat
+    requires size(t) <= 1000000
+    ensures result == size(t)
+    decreases t
+{
+    match t {
+        Leaf => 0,
+        Node(l, x, r) => 1 + count(l) + count(r),
+    }
+}

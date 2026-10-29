@@ -1,0 +1,17 @@
+// expect: E4020
+data Tree { Leaf, Node(left: Tree, key: Int, right: Tree) }
+
+spec fn mem(t: Tree, k: Int) -> Bool
+    decreases t
+=
+    match t { Leaf => false, Node(l, x, r) => x == k || mem(l, k) || mem(r, k) }
+
+fn find(t: Tree, k: Int) -> Bool
+    ensures result == mem(t, k)
+    decreases t
+{
+    match t {
+        Leaf => false,
+        Node(l, x, r) => if k == x { true } else if k < x { find(l, k) } else { find(r, k) },
+    }
+}

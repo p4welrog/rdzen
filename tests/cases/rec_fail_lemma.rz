@@ -1,0 +1,26 @@
+// expect: E4020
+data Tree { Leaf, Node(left: Tree, key: Int, right: Tree) }
+
+spec fn mem(t: Tree, k: Int) -> Bool
+    decreases t
+=
+    match t { Leaf => false, Node(l, x, r) => x == k || mem(l, k) || mem(r, k) }
+
+spec fn all_le(t: Tree, b: Int) -> Bool
+    decreases t
+=
+    match t { Leaf => true, Node(l, x, r) => x <= b && all_le(l, b) && all_le(r, b) }
+
+lemma fn le_not_mem(t: Tree, b: Int, k: Int)
+    requires all_le(t, b) && k >= b
+    ensures !mem(t, k)
+    decreases t
+{
+    match t {
+        Leaf => { },
+        Node(l, x, r) => {
+            le_not_mem(l, b, k)
+            le_not_mem(r, b, k)
+        },
+    }
+}
