@@ -188,6 +188,8 @@ class Emitter:
         if isinstance(e, Name):
             if e.name in env:
                 return env[e.name]
+            if getattr(e, "fnref", None) is not None:
+                return esc(e.name)
             return str(self.ch.consts[e.name].value)
         if isinstance(e, SelfRef):
             return selfv
@@ -219,6 +221,8 @@ class Emitter:
             return f"{fn}({F(e.body, env2)} for {v} in range({F(e.lo)}, {F(e.hi)}))"
         if isinstance(e, Call):
             args = ", ".join(F(a.expr) for a in e.args)
+            if getattr(e, "closure", None) is not None:
+                return f"{env[e.name]}({args})"
             if e.name in self.ch.specs:
                 return f"_spec_{e.name}({args})"
             return self.builtin(e.name, [F(a.expr) for a in e.args])
@@ -360,12 +364,16 @@ class Emitter:
             try:
                 py, mut, rt = self.lookup(e.name)
             except KeyError:
+                if getattr(e, "fnref", None) is not None:
+                    return esc(e.name)
                 return str(self.ch.consts[e.name].value)
             if mut and e.ty is not None and has_array(e.ty, self.ch.data):
                 return f"_cp({py})"
             return py
         if isinstance(e, Hole):
             raise Unsupported("program zawiera dziurę")
+        if isinstance(e, Lambda):
+            return self.lambda_(e)
         if isinstance(e, Unary):
             a = self.val(e.expr)
             if e.op == "!":
@@ -442,7 +450,62 @@ class Emitter:
             return t
         raise Unsupported(type(e).__name__)
 
+    def lambda_(self, e):
+        """Domknięcie: fabryka z migawką przechwyconych zmiennych (Python wiąże nazwy późno)."""
+        params = {pn for pn, _ in e.params}
+        captured = []
+        for n in walk(e.body):
+            if isinstance(n, Name) and n.name not in params and n.name not in [c[0] for c in captured]:
+                try:
+                    py, mut, rt = self.lookup(n.name)
+                except KeyError:
+                    continue
+                captured.append((n.name, py, mut, rt))
+        k = self.fresh("mk")
+        self.w(f"def {k}({', '.join(py for _, py, _, _ in captured)}):")
+        self.ind += 1
+        self.push_scope()
+        pys = [self.bind(pn) for pn, _ in e.params]
+        fname = self.fresh("fn")
+        self.w(f"def {fname}({', '.join(pys)}):")
+        self.ind += 1
+        r = self.fresh("r")
+        saved_loops = self.loops
+        self.loops = []
+        self.valued(e.body, ("assign", r))
+        self.loops = saved_loops
+        if e.ret_full is not None and e.ret_full.refs and self.need(("refine", _ref_span(e.ret_full), e.span)):
+            env = dict(self.fenv())
+            env.update(zip(getattr(e, "alias_pnames", ()), pys))
+            for q in e.ret_full.refs:
+                self.w(f"_check({self.f(q, env, selfv=r)}, 'refine', {self.loc(e.span)})")
+        self.w(f"return {r}")
+        self.ind -= 1
+        self.pop_scope()
+        self.w(f"return {fname}")
+        self.ind -= 1
+        args = []
+        for _, py, mut, rt in captured:
+            args.append(f"_cp({py})" if mut and rt is not None and has_array(rt, self.ch.data) else py)
+        return f"{k}({', '.join(args)})"
+
     def call(self, e):
+        if getattr(e, "closure", None) is not None:
+            vals = self.seq([a.expr for a in e.args])
+            ft = e.closure
+            names = []
+            for v in vals:
+                if not _atomic(v) and any(pt.refs for pt in ft.args[:-1]):
+                    t = self.fresh()
+                    self.w(f"{t} = {v}")
+                    v = t
+                names.append(v)
+            penv = dict(zip(ft.pnames, names))
+            for v, pt in zip(names, ft.args[:-1]):
+                if pt.refs and self.need(("pre", _ref_span(pt), e.span)):
+                    for q in pt.refs:
+                        self.w(f"_check({self.f(q, penv, selfv=v)}, 'pre', {self.loc(e.span)})")
+            return f"{self.lookup(e.name)[0]}({', '.join(names)})"
         sig = e.callee
         if getattr(getattr(sig, "decl", None), "lemma", False):
             return "None"          # lematy są wymazywane (całkowite, bez efektów)
@@ -480,7 +543,8 @@ class Emitter:
         args, penv = [], {}
         need_pre = any(self.need(("pre", q.span, e.span)) for q in decl.requires) or \
             any(self.need(("pre", _ref_span(pt), e.span)) for _, pt, _ in sig.params if _all_refs(pt)) or \
-            self.need(("term", e.span))
+            self.need(("term", e.span)) or \
+            any(self.need(("pre-fn", a.span)) for a in e.args)
         for (pn, pt, pinout), a in zip(sig.params, e.args):
             if pinout:
                 v = self.lookup(a.inout)[0]
@@ -492,7 +556,10 @@ class Emitter:
                     v = t
             args.append(v)
             penv[pn] = v
-        for (pn, pt, pinout), v in zip(sig.params, args):
+        for i, ((pn, pt, pinout), v, a) in enumerate(zip(sig.params, args, e.args)):
+            if pt.kind == "Fn":
+                args[i] = penv[pn] = self.fn_monitor(v, pt, a, e)
+                continue
             if _all_refs(pt) and self.need(("pre", _ref_span(pt), e.span)):
                 for r in _all_refs_top(pt):
                     self.w(f"_check({self.f(r, penv, selfv=v)}, 'pre', {self.loc(e.span)})")
@@ -509,6 +576,34 @@ class Emitter:
         tg = ", ".join(self.lookup(n)[0] for n in inouts)
         self.w(f"{t}, {tg} = {call}")
         return t
+
+    def fn_monitor(self, v, dst, a, e):
+        """Funkcja przekazana jako argument, gdy zobowiązania typu funkcyjnego nie udowodniono:
+        opakowanie sprawdzające przy każdym wywołaniu uściślenia parametrów funkcji źródłowej
+        i uściślenie wyniku wymagane przez typ parametru (monitor kontraktu wyższego rzędu)."""
+        src = getattr(a.expr, "fty", None)
+        contra = src is not None and any(p.refs for p in src.args[:-1]) and self.need(("pre-fn", a.span))
+        cov = bool(dst.args[-1].refs) and self.need(("pre", _ref_span(dst), e.span))
+        if not (contra or cov):
+            return v
+        w = self.fresh("w")
+        xs = [self.fresh(n) for n in dst.pnames]
+        r = self.fresh("r")
+        self.w(f"def {w}({', '.join(xs)}):")
+        self.ind += 1
+        if contra:
+            senv = dict(zip(src.pnames, xs))
+            for x, p in zip(xs, src.args[:-1]):
+                for q in p.refs:
+                    self.w(f"_check({self.f(q, senv, selfv=x)}, 'pre', {self.loc(e.span)})")
+        self.w(f"{r} = {v}({', '.join(xs)})")
+        if cov:
+            denv = dict(zip(dst.pnames, xs))
+            for q in dst.args[-1].refs:
+                self.w(f"_check({self.f(q, denv, selfv=r)}, 'pre', {self.loc(e.span)})")
+        self.w(f"return {r}")
+        self.ind -= 1
+        return w
 
     # ---------- wyrażenia z wartością docelową ----------
     def valued(self, e, mode):

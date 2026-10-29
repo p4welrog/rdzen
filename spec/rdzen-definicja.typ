@@ -1,8 +1,8 @@
 // =====================================================================
-//  Rdzeń — formalna definicja języka programowania (wersja 0.1)
+//  Rdzeń — formalna definicja języka programowania (wersja 0.5)
 // =====================================================================
 
-#set document(title: "Rdzeń — formalna definicja języka, wersja 0.1")
+#set document(title: "Rdzeń — formalna definicja języka, wersja 0.5")
 #set page(
   paper: "a4",
   margin: (x: 2.3cm, y: 2.4cm),
@@ -100,7 +100,7 @@
   #v(0.3em)
   #text(size: 14pt)[Formalna definicja języka programowania]
   #v(0.6em)
-  #text(size: 11pt)[Wersja 0.4 — szkic normatywny]
+  #text(size: 11pt)[Wersja 0.5 — szkic normatywny]
   #v(0.4em)
   #text(size: 10pt, style: "italic")[29 października 2026]
   #v(2.5cm)
@@ -150,7 +150,7 @@ Definicja ma budowę warstwową, wzorowaną na definicji Standard ML:
   [*Z3*], [*Brak fałszywych przyjaciół.* Konstrukcja zapisana tak jak w Kotlinie lub Ruście ma tę samą semantykę. Gdzie semantyka się różni, zapis jest inny. Odstępstwa wymienia §2.6.],
   [*Z4*], [*Jawność.* Brak niejawnych konwersji, przeciążania, dziedziczenia, makr, refleksji, wyjątków, wartości `null` i globalnego stanu mutowalnego.],
   [*Z5*], [*Lokacje nie są wartościami.* Mutowalne zmienne nie mogą być przechowywane, zwracane ani przechwytywane. Jedynym sposobem współdzielenia lokacji jest parametr `inout`, objęty prawem wyłączności. Z tego wynika brak aliasingu (§8).],
-  [*Z6*], [*Każda formuła jest wykonywalna.* Fragment logiki specyfikacji zawiera wyłącznie kwantyfikatory ograniczone, więc każdy kontrakt można sprawdzić w czasie wykonania (tw. 8.8). To umożliwia weryfikację stopniowaną.],
+  [*Z6*], [*Każda formuła jest wykonywalna.* Fragment logiki specyfikacji zawiera wyłącznie kwantyfikatory ograniczone, więc każdy kontrakt można sprawdzić w czasie wykonania (tw. 8.8). To umożliwia weryfikację stopniowaną. Wyjątkiem są hipotezy typów funkcyjnych (kwantyfikacja po całej dziedzinie); te sprawdza się leniwie — monitorem przy każdym wywołaniu (§6.6).],
   [*Z7*], [*Determinizm diagnostyki.* Ten sam program daje tę samą listę diagnostyk w tej samej kolejności, niezależnie od maszyny i czasu.],
 )
 
@@ -220,7 +220,8 @@ path        = ident { "." ident } ;
 (* ---- typy ---- *)
 type        = base_type [ "where" formula ] ;
 base_type   = Tident [ "<" type { "," type } ">" ]
-            | "fn" "(" [ type { "," type } ] ")" "->" type [ "!" effects ] ;
+            | "fn" "(" [ fparam { "," fparam } ] ")" "->" type [ "!" effects ] ;
+fparam      = [ ident ":" ] type ;       (* nazwa: do uściśleń zależnych *)
 effects     = "{" [ effect { "," effect } ] "}" ;
 effect      = Tident | ident ;           (* etykieta lub zmienna efektowa *)
 tparams     = "<" tparam { "," tparam } ">" ;
@@ -242,6 +243,7 @@ fn_decl     = [ "partial" | "lemma" ] "fn" ident [ tparams ] "(" [ params ] ")"
               { contract } [ examples [ ";" ] ] block ;
 params      = param { "," param } ;
 param       = [ "inout" ] ident ":" type ;
+lparam      = ident [ ":" type ] ;       (* typ pominięty: z typu oczekiwanego *)
 contract    = ( "requires" formula | "ensures" formula
               | "decreases" term ) ";" ;
 examples    = "examples" "{" { ( expr | "forall" binders ":" expr ) ";" } "}" ;
@@ -274,7 +276,7 @@ arg         = expr | "&" ident ;                    (* & — argument inout *)
 primary     = literal | ident | Tident [ "(" [ args ] ")" ] | hole
             | "(" expr ")" | "[" [ expr { "," expr } ] "]"
             | block | if_expr | match_expr
-            | "fn" "(" [ params ] ")" [ "->" type ] "=>" expr
+            | "fn" "(" [ lparam { "," lparam } ] ")" [ "->" type ] "=>" expr
             | "spawn" ident "(" [ args ] ")"
             | "send" "(" expr "," expr ")" | "recv" "(" "&" ident ")" ;
 if_expr     = "if" expr block [ "else" ( if_expr | block ) ] ;
@@ -353,7 +355,7 @@ B   ::= Int | Bool | Byte | F64 | Unit | Str            typy bazowe
      |  T⟨τ̄⟩                                            typ danych
      |  Array⟨τ⟩
      |  α                                               zmienna typowa
-     |  (τ̄) →ε τ                                        funkcja (bez inout)
+     |  (x̄ : T̄) →ε T                                    funkcja (bez inout); x̄ wiążą w T
      |  Cap⟨K⟩ | Chan⟨τ⟩ | Mailbox⟨τ⟩
 T   ::= {ν : τ | φ}                                     typ uściślony, φ ∈ F
 ```
@@ -363,6 +365,12 @@ Typ uściślony $\{nu : tau | top\}$ utożsamiamy z $tau$. Składnia konkretna
 $erase(\{nu : tau | phi\}) = tau$ usuwa uściślenia; statyczna semantyka
 (rozdz. 5) operuje na typach kształtu, a uściślenia są obsługiwane wyłącznie
 przez semantykę weryfikacyjną (rozdz. 6).
+
+W typie funkcyjnym $(overline(x) : overline(T)) ->^epsilon \{nu : sigma | psi\}$ uściślenie wyniku $psi$ może
+odwoływać się do parametrów $overline(x)$ (uściślenie zależne), np. `fn(x: Int) -> Int where self > x`.
+Uściślenia parametrów są warunkiem wstępnym wartości funkcyjnej, uściślenie wyniku — jej
+gwarancją; funkcja nazwana z `requires` nie jest wartością (warunek należy zapisać w typie
+parametru).
 
 Typy `Nat`, `Byte`, `Str` i `Ordering` są zdefiniowane w preludium (dodatek B):
 `type Nat = Int where self >= 0`, `type Byte = Int where 0 <= self && self < 256`,
@@ -583,6 +591,27 @@ czyli zmienne mutowalne są *migawkowane* w chwili utworzenia domknięcia (przec
 wartość). Zapis do przechwyconej zmiennej mutowalnej w ciele domknięcia jest błędem `E6010`
 (Z5: lokacja nie może uciec z zasięgu). Wolne zmienne niemutowalne są po prostu podstawiane
 w czasie wykonania (wartości są zamknięte).
+
+Ciało domknięcia jest wyrażeniem bez efektów sterowania i stanu: nie zawiera pętli, `return`,
+`break`, `continue`, przypisań, argumentów `inout` ani zagnieżdżonych domknięć (`E3015`).
+Obliczenie wymagające tych konstrukcji zapisuje się jako funkcję nazwaną.
+
+*Typ oczekiwany.* Gdy domknięcie stoi w pozycji o znanym typie funkcyjnym $T_e$ (argument
+wywołania, `let` z adnotacją), typem domknięcia jest $T_e$: pominięte typy parametrów są
+z niego przejmowane, a jawna adnotacja o innym uściśleniu parametru lub wyniku jest błędem
+`E2141`. Uściślenie wyniku $T_e$ jest więc zobowiązaniem ciała domknięcia (§6.4), a nie
+miejsca przekazania.
+
+*Funkcje nazwane jako wartości.* Nazwa $f$ funkcji globalnej w pozycji wartości oznacza
+wartość typu $(overline(x) : overline(T)) -> T_r$ z sygnatury $f$. Dopuszczalne są tylko funkcje
+totalne, niegeneryczne, bez `requires`, bez parametrów `inout` i funkcyjnych, niebędące lematami
+i nie użyte jako wartość we własnej silnie spójnej składowej grafu wywołań (`E3016`). Jej
+znaczenie logiczne to kontrakt: $forall overline(x). H(overline(x) : overline(T)) => Q_f [f(overline(x)) slash "result"]$.
+
+Wartości funkcyjne nie mają równości (`E2031`). W wersji 0.5 typ funkcyjny może wystąpić tylko
+jako typ parametru, wiązania `let` i parametru `spec fn` — nie jako typ wyniku, argument typu
+(tablice, typy danych), pole, zmienna `var`, parametr `inout` ani wewnątrz innego typu
+funkcyjnego (`E2015`). Wartości funkcyjne nie uciekają więc z wywołania, w którym je przekazano.
 
 == Aktorzy
 
@@ -986,6 +1015,7 @@ Dla kontekstu $Gamma$ definiujemy formułę hipotez
 $ H(Gamma) = and.big_(x : tau in Gamma) h(x, tau) quad "gdzie" quad
   h(x, \{nu : tau | phi\}) = phi[x slash nu] and h(x, tau) $
 oraz dla typów kształtu: $h(x, T chevron.l dots chevron.r) = phi_T[x slash "self"]$ (niezmiennik typu danych),
+$h(f, (overline(y) : overline(T)) -> \{nu : sigma | psi\}) = forall overline(y). H(overline(y) : overline(T)) => psi[f(overline(y)) slash nu]$ (typ funkcyjny),
 $h(x, "Array"chevron.l sigma chevron.r) = 0 <= len(x) <= MAX and forall k in [0, len(x)). h(x[k], sigma)$,
 $h(x, "Int") = MIN <= x <= MAX$, $h(x, "Byte") = 0 <= x < 256$ i $top$ w pozostałych przypadkach.
 Dla typu danych o argumentach uściślonych, np. $"Option"chevron.l \{nu : "Int" | nu >= 0\} chevron.r$,
@@ -1087,7 +1117,16 @@ Wywołanie domknięcia $e(overline(e'))$ o typie $(overline(\{nu : tau | phi\}))
 daje obligację $and.big_i phi_i (v_i)$ rodzaju `pre` i hipotezę $psi(r)$ dla wyniku. Utworzenie
 domknięcia $"fn"(overline(x)) => e$ generuje w miejscu utworzenia koniunkcję
 $forall overline(x). H(overline(x) : overline(tau)) => wp(e, chevron.l psi, top, top, psi chevron.r)$, w której
-zobowiązania $psi$ mają rodzaj `post`.
+zobowiązania $psi$ mają rodzaj `refine`. Domknięcie, którego ciało należy do fragmentu $F$, jest
+w logice termem $lambda overline(x). [|e|]$; pozostałe są znane wyłącznie przez swój typ $h(f, T)$.
+
+*Przekazanie wartości funkcyjnej.* Argument $v$ dla parametru typu
+$T_d = (overline(x) : overline(\{nu : tau | phi^d\})) -> \{nu : sigma | psi^d\}$, którego wartość ma typ źródłowy
+$T_s = (overline(x) : overline(\{nu : tau | phi^s\})) -> \{nu : sigma | psi^s\}$, daje dwa zobowiązania rodzaju `pre`:
+kontrawariancję parametrów $forall overline(x). and.big_i phi^d_i => and.big_i phi^s_i$ oraz kowariancję wyniku
+$h(v, T_d)$. Dla funkcji nazwanej $f$ druga obligacja przyjmuje postać bezkwantyfikatorową
+$forall overline(x), r. thin and.big_i phi^d_i and Q_f [r slash "result"] => psi^d (r)$, rozstrzygalną bez aksjomatu
+kontraktu.
 
 === Zobowiązania jawne, sprawdzenia, dziury i aktorzy
 
@@ -1191,6 +1230,15 @@ kwantyfikowanym wewnątrz warunku (zmienne pętli po „havoc”, wyniki wywoła
 Gdy $f$ wymaga kapabilności, odtworzenie nie jest wykonywane i kontrprzykład otrzymuje status
 `not-replayable`.
 
+*Parametry funkcyjne.* Hipoteza $h(g, T)$ parametru funkcyjnego jest kwantyfikowana, więc
+procedura decyzyjna często zwraca Unknown. Wtedy zastępuje się ją instancjami w punktach
+$overline(t)$, w których formuła stosuje $g$ (poza zasięgiem innych kwantyfikatorów; w przeciwnym
+razie krok jest pomijany). Model $M$ tak powstałej formuły jest kontrprzykładem rzeczywistym,
+jeśli typ $T$ jest *punktowo zamieszkany*: $forall overline(y). H(overline(y) : overline(T)) => exists r. psi(r)$ —
+wartości $g$ z $M$ w punktach $overline(t)$ przedłużają się wtedy do funkcji typu $T$. Kontrprzykład
+przedstawia $g$ jako tabelę wartości w tych punktach. Wynik wywołania domknięcia znanego
+wyłącznie przez typ jest abstrakcją (kontrprzykład indukcyjny); wynik wywołania parametru — nie.
+
 === Status i przekształcenie programu
 
 Dla każdego zobowiązania $kappa$ z formułą $phi_kappa$:
@@ -1201,7 +1249,7 @@ Dla każdego zobowiązania $kappa$ z formułą $phi_kappa$:
   stroke: 0.4pt + luma(200),
   [*Wynik*], [*Skutek*],
   [Valid], [Status `proved`. Węzeł $"assert"[kappa]$ jest usuwany; dla zobowiązań niejawnych sprawdzenie dynamiczne (granic, przepełnienia, dzielenia) jest *eliminowane* z kodu.],
-  [Unknown], [Najpierw *próba obalenia testowaniem*: deterministycznie generowane wejścia spełniające warunki wstępne (ziarno wyznaczone z identyfikatora zobowiązania) są wykonywane w interpreterze; naruszenie tego samego zobowiązania daje status `refuted` z kontrprzykładem rzeczywistym (zminimalizowanym). W przeciwnym razie status `unknown`: węzeł zastępowany przez $"check"[kappa] phi_kappa$ (dla niejawnych zostaje sprawdzenie dynamiczne), ostrzeżenie `W4200` z listą „niedowiedzionych obietnic”. W funkcjach specyfikacyjnych i lematach `unknown` jest błędem.],
+  [Unknown], [Dla zobowiązań z parametrami funkcyjnymi najpierw instancjonowanie (§6.6.2). Następnie *próba obalenia testowaniem*: deterministycznie generowane wejścia spełniające warunki wstępne (ziarno wyznaczone z identyfikatora zobowiązania) są wykonywane w interpreterze; naruszenie tego samego zobowiązania daje status `refuted` z kontrprzykładem rzeczywistym (zminimalizowanym). W przeciwnym razie status `unknown`: węzeł zastępowany przez $"check"[kappa] phi_kappa$ (dla niejawnych zostaje sprawdzenie dynamiczne), ostrzeżenie `W4200` z listą „niedowiedzionych obietnic”. W funkcjach specyfikacyjnych i lematach `unknown` jest błędem. Niedowiedzione zobowiązanie typu funkcyjnego przy przekazaniu wartości staje się *monitorem*: przekazywana jest funkcja opakowująca, która przy każdym wywołaniu sprawdza uściślenia parametrów funkcji źródłowej i uściślenie wyniku typu docelowego (kontrakty wyższego rzędu w stylu Findlera–Felleisena).],
   [Invalid, rzeczywisty], [Status `refuted`. Błąd kompilacji o kodzie z tabeli §6.5.],
   [Invalid, indukcyjny, jawne], [Status `refuted`. Błąd kompilacji.],
   [Invalid, indukcyjny, niejawne], [Status `refuted-inductive`. Ostrzeżenie `W4400`, sprawdzenie dynamiczne pozostaje.],

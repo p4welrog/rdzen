@@ -41,6 +41,8 @@ class Enc:
             s = dt.create()
         elif k == "Data":
             s = self._data_sort(rt)
+        elif k == "Fn":
+            s = z3.ArraySort(*[self.sort(a) for a in rt.args])
         else:
             raise ValueError(f"brak sortu dla {rt}")
         self.sorts[key] = s
@@ -138,6 +140,10 @@ class Enc:
             inner = self.hyp(z3.Select(self.arr_data(v), j), rt.args[0], refine_fn, depth + 1, refs_only)
             if inner:
                 out.append(z3.ForAll([j], z3.Implies(z3.And(0 <= j, j < ln), z3.And(*inner))))
+        elif k == "Fn":
+            t = self.fn_hyp_fn(v, rt) if getattr(self, "fn_hyp_fn", None) else None
+            if t is not None:
+                out.append(t)
         elif k == "Data" and depth < 2:
             d = self.ch.data[rt.name]
             subst = dict(zip(d.tparams, rt.args))

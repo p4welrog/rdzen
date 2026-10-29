@@ -214,10 +214,17 @@ def refuted_diag(o, ch, ver, fdecl):
                 assignment[pn] = raw_value(m, z3.Const(pn, ver.enc.sort(pt)), pt, ch)
             except Exception:
                 pass
+    # parametry funkcyjne: wartości w punktach zastosowania
+    for (pn, pt, _) in sig.params:
+        if pt.kind == "Fn":
+            assignment[pn] = fn_table(m, z3.Const(pn, ver.enc.sort(pt)), list(o.pc) + [o.phi])
     # dodatkowe stałe (havoc, wyniki wywołań)
     havoc_vars = {}
+    in_goal = {str(c) for c in collect_consts([o.phi])}
     for c in collect_consts(list(o.pc) + [o.phi]):
         n = str(c)
+        if n in ver.desc and ("!c" in n or "!v" in n) and n not in in_goal:
+            continue        # zmienne pomocnicze innych zobowiązań funkcyjnych
         if n in ver.desc:
             disp, desc = ver.desc[n]
             try:
@@ -261,6 +268,27 @@ def refuted_diag(o, ch, ver, fdecl):
                                    "class": cls, "replay": replay},
                    notes=notes, label=o.label or f"zobowiązanie {o.kind}: {o.text}")
     return d, status
+
+
+def fn_table(m, f, exprs):
+    """Funkcja z modelu jako tabela wartości w punktach, w których program ją stosuje."""
+    pts, stack, seen = {}, list(exprs), set()
+    while stack:
+        e = stack.pop()
+        if e.get_id() in seen:
+            continue
+        seen.add(e.get_id())
+        if z3.is_quantifier(e):
+            continue
+        if z3.is_app(e):
+            if e.decl().kind() == z3.Z3_OP_SELECT and e.arg(0).eq(f):
+                xs = tuple(str(m.eval(e.arg(i), model_completion=True)) for i in range(1, e.num_args()))
+                pts[xs] = str(m.eval(e, model_completion=True))
+            stack.extend(e.children())
+    if not pts:
+        return "‹dowolna funkcja danego typu›"
+    items = sorted(pts.items(), key=lambda kv: [int(x) if x.lstrip("-").isdigit() else x for x in kv[0]])
+    return "{" + ", ".join(f"{', '.join(k)} ↦ {v}" for k, v in items) + ", …}"
 
 
 def raw_value(m, c, rt, ch):
@@ -503,7 +531,7 @@ def _gen(ch, rt, rng, depth):
             ctors = [c for c in ctors if all(subst_rt(ft, s).bare().shape() != rt.bare().shape() for _, ft in c[1])] or ctors
         cname, fields = rng.choice(ctors)
         return Ctor(cname, [_gen(ch, subst_rt(ft, s), rng, depth + 1) for _, ft in fields])
-    raise ValueError(f"nie można generować wartości typu {rt}")
+    return _FAIL     # np. typy funkcyjne — brak generatora
 
 
 def shrink(ch, binders, env, failing):

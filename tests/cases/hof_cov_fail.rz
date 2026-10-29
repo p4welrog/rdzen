@@ -1,0 +1,13 @@
+// expect: E4010
+// Funkcja nazwana nie spełnia uściślenia wyniku wymaganego przez typ parametru.
+fn apply(f: fn(x: Int where self < 1000) -> Int where self > x + 1, a: Int where self < 1000) -> Int {
+    f(a)
+}
+
+fn inc(x: Int where self < 1000000) -> Int where self == x + 1 {
+    x + 1
+}
+
+fn use_it(a: Int where self < 1000) -> Int {
+    apply(inc, a)
+}

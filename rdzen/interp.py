@@ -42,7 +42,40 @@ class UnitV:
 UNITV = UnitV()
 
 
+class Closure:
+    __slots__ = ("lam", "env")
+
+    def __init__(self, lam, env):
+        self.lam, self.env = lam, env
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+class Monitored:
+    """Funkcja przekazana do parametru typu funkcyjnego: kontrakt sprawdzany przy każdym wywołaniu."""
+    __slots__ = ("fv", "src", "dst", "arg_span", "call_span")
+
+    def __init__(self, fv, src, dst, arg_span, call_span):
+        self.fv, self.src, self.dst, self.arg_span, self.call_span = fv, src, dst, arg_span, call_span
+
+    def __deepcopy__(self, memo):
+        return self
+
+
+class FnRef:
+    __slots__ = ("sig",)
+
+    def __init__(self, sig):
+        self.sig = sig
+
+    def __deepcopy__(self, memo):
+        return self
+
+
 def fmt(v) -> str:
+    if isinstance(v, (Closure, FnRef, Monitored)):
+        return "‹funkcja›"
     if isinstance(v, bool):
         return "true" if v else "false"
     if isinstance(v, int):
@@ -131,6 +164,8 @@ class Interp:
         if isinstance(e, Name):
             if e.name in env:
                 return env[e.name]
+            if getattr(e, "fnref", None) is not None:
+                return FnRef(e.fnref)
             return self.ch.consts[e.name].value
         if isinstance(e, SelfRef):
             return selfv
@@ -179,6 +214,8 @@ class Interp:
             return e.kind == "forall"
         if isinstance(e, Call):
             args = [F(a.expr) for a in e.args]
+            if getattr(e, "closure", None) is not None:
+                return self.apply(env[e.name], args, e)
             if e.name in self.ch.specs:
                 sf = self.ch.specs[e.name]
                 penv = {p[0]: v for p, v in zip(sf.rparams, args)}
@@ -209,6 +246,35 @@ class Interp:
             els = e.els
             return F(els.stmts[0].expr if isinstance(els, Block) else els)
         raise NotImplementedError(type(e).__name__)
+
+    def apply(self, fv, args, e):
+        """Wywołanie wartości funkcyjnej (domknięcia lub funkcji nazwanej)."""
+        if isinstance(fv, Monitored):
+            src, dst = fv.src, fv.dst
+            if src is not None and any(p.refs for p in src.args[:-1]):
+                senv = dict(zip(src.pnames, args))
+                for v, pt in zip(args, src.args[:-1]):
+                    if pt.refs and not self.check_type(v, pt, senv):
+                        raise Violation("pre", ("pre-fn", fv.arg_span), fv.call_span, f"argument {fmt(v)}")
+            r = self.apply(fv.fv, args, e)
+            if dst.args[-1].refs and not self.check_type(r, dst.args[-1], dict(zip(dst.pnames, args))):
+                raise Violation("pre", ("pre", _ref_span(dst), fv.call_span), fv.call_span, f"wynik {fmt(r)}")
+            return r
+        if isinstance(fv, FnRef):
+            return self.call_fn(fv.sig, args, e.span)[0]
+        lam = fv.lam
+        env = dict(fv.env)
+        for (pn, _), v in zip(lam.params, args):
+            env[pn] = v
+        self.tick()
+        if len(self.frames) > 2000:
+            raise BudgetExceeded()
+        v = self.ev(lam.body, env)
+        renv = dict(env)
+        renv.update(zip(getattr(lam, "alias_pnames", ()), args))
+        if lam.ret_full is not None and _ref_span(lam.ret_full) is not None and not self.check_type(v, lam.ret_full, renv):
+            raise Violation("refine", ("refine", _ref_span(lam.ret_full), lam.span), lam.span, f"wynik {fmt(v)}")
+        return v
 
     def measure(self, v, rt):
         """Miara jak w weryfikatorze: Int bez zmian, typ danych → ranga."""
@@ -325,9 +391,13 @@ class Interp:
         if isinstance(e, Name):
             if e.name in env:
                 return env[e.name]
+            if getattr(e, "fnref", None) is not None:
+                return FnRef(e.fnref)
             return self.ch.consts[e.name].value
         if isinstance(e, Hole):
             raise HoleHit(e.name)
+        if isinstance(e, Lambda):
+            return Closure(e, {k: copy.deepcopy(v) for k, v in env.items()})
         if isinstance(e, Unary):
             v = self.ev(e.expr, env)
             if e.op == "!":
@@ -406,6 +476,14 @@ class Interp:
         return v
 
     def call(self, e, env):
+        if getattr(e, "closure", None) is not None:
+            args = [copy.deepcopy(self.ev(a.expr, env)) for a in e.args]
+            ft = e.closure
+            penv = dict(zip(ft.pnames, args))
+            for v, pt in zip(args, ft.args[:-1]):
+                if pt.refs and not self.check_type(v, pt, penv):
+                    raise Violation("pre", ("pre", _ref_span(pt), e.span), e.span, f"argument {fmt(v)}")
+            return self.apply(env[e.name], args, e)
         if e.name in self.ch.specs:
             sf = self.ch.specs[e.name]
             args = [self.ev(a.expr, env) for a in e.args]
@@ -430,6 +508,9 @@ class Interp:
             if n == "slice" and not (0 <= vals[1] <= vals[2] <= len(vals[0])):
                 raise Violation("pre", ("pre", e.span, e.span), e.span, f"slice({vals[1]}, {vals[2]}) dla długości {len(vals[0])}")
             return self.builtin_pure(n, vals)
+        for i, ((pn, pt, _), a) in enumerate(zip(sig.params, e.args)):
+            if pt.kind == "Fn":
+                vals[i] = Monitored(vals[i], getattr(a.expr, "fty", None), pt, a.span, e.span)
         res, outs = self.call_fn(sig, vals, e.span, targs=e.targs or {})
         k = 0
         for (pn, pt, pinout), a in zip(sig.params, e.args):

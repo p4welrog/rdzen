@@ -7,7 +7,7 @@ import glob, os, sys, random, importlib.util, tempfile, traceback
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.setrecursionlimit(10000)
 from rdzen.driver import compile_source, gen_value, _FAIL
-from rdzen.emit_py import emit, Unsupported
+from rdzen.emit_py import emit, Unsupported, esc
 from rdzen.interp import Interp, Violation, BudgetExceeded, fmt
 
 N = int(os.environ.get("N", 150))
@@ -49,7 +49,7 @@ def run_file(path, tmp):
         if f.lemma:
             continue
         sig = f.sig
-        pyf = getattr(mod, f.name if f.name not in ("min", "max") else f.name + "_")
+        pyf = getattr(mod, esc(f.name))
         for _ in range(N):
             vals = []
             for (pn, pt, _) in sig.params:

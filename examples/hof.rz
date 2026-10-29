@@ -1,0 +1,97 @@
+// Funkcje wyższego rzędu: typy funkcyjne z uściśleniami, domknięcia, funkcje jako wartości.
+
+fn map<A, B>(xs: Array<A>, f: fn(A) -> B) -> Array<B>
+    requires xs.len < int_max
+    ensures result.len == xs.len
+    ensures forall k in 0..xs.len: result[k] == f(xs[k])
+{
+    var out: Array<B> = []
+    for x in xs
+        invariant out.len == it
+        invariant forall k in 0..it: out[k] == f(xs[k])
+    {
+        push(&out, f(x))
+    }
+    out
+}
+
+fn filter<A>(xs: Array<A>, keep: fn(A) -> Bool) -> Array<A>
+    requires xs.len < int_max
+    ensures result.len <= xs.len
+    ensures forall k in 0..result.len: keep(result[k])
+    ensures forall k in 0..result.len: contains(xs, result[k])
+{
+    var out: Array<A> = []
+    for x in xs
+        invariant out.len <= it
+        invariant forall k in 0..out.len: keep(out[k])
+        invariant forall k in 0..out.len: exists j in 0..it: xs[j] == out[k]
+    {
+        if keep(x) {
+            push(&out, x)
+        }
+    }
+    out
+}
+
+fn all<A>(xs: Array<A>, p: fn(A) -> Bool) -> Bool
+    ensures result == (forall k in 0..xs.len: p(xs[k]))
+{
+    for x in xs
+        invariant forall k in 0..it: p(xs[k])
+    {
+        if !p(x) {
+            return false
+        }
+    }
+    true
+}
+
+fn fold(xs: Array<Int>, init: Int, step: fn(acc: Int, x: Int) -> Int) -> Int {
+    var acc = init
+    for x in xs {
+        acc = step(acc, x)
+    }
+    acc
+}
+
+// Uściślenia zależne: wynik większy od argumentu, ale nie więcej niż o 10.
+fn apply_twice(f: fn(x: Int where self < 1000000) -> Int where self > x && self <= x + 10, a: Int) -> Int
+    requires a < 1000
+    ensures result > a + 1
+{
+    f(f(a))
+}
+
+fn inc(x: Int where self < 1000000) -> Int where self == x + 1 {
+    x + 1
+}
+
+fn bounded_sum(xs: Array<Int>) -> Int
+    requires xs.len <= 1000
+    requires forall k in 0..xs.len: -1000 <= xs[k] && xs[k] <= 1000
+{
+    let clipped = map(xs, fn(x) => max(-1000, min(1000, x)))
+    fold(clipped, 0, fn(acc, x) => match checked_add(acc, x) { Some(s) => s, None => acc })
+}
+
+fn demo(xs: Array<Int>) -> Array<Int>
+    requires xs.len < 1000
+    requires forall k in 0..xs.len: 0 <= xs[k] && xs[k] <= 100
+    ensures result.len <= xs.len
+    ensures forall k in 0..result.len: result[k] > 5 && result[k] % 2 == 0
+    examples {
+        demo([1, 6, 8, 3, 10]) == [6, 8, 10]
+        twice(5) == 7
+    }
+{
+    let limit = 5
+    filter(xs, fn(x) => x > limit && x % 2 == 0)
+}
+
+fn twice(a: Int) -> Int
+    requires a < 100
+    ensures result > a + 1
+{
+    apply_twice(inc, a)
+}

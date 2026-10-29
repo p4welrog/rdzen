@@ -1,0 +1,21 @@
+// expect: E4010, E4020
+fn apply_pos(f: fn(x: Int where self > 0) -> Int, x: Int where self > 0) -> Int {
+    f(x)
+}
+
+fn half(x: Int where self > 10) -> Int {
+    x / 2
+}
+
+// half wymaga x > 10, a apply_pos przekazuje dowolne x > 0
+fn bad_contra() -> Int {
+    apply_pos(half, 20)
+}
+
+fn first_even(xs: Array<Int>) -> Bool
+    requires xs.len > 0
+    ensures result
+{
+    let even = fn(x: Int) => x % 2 == 0
+    even(xs[0])
+}

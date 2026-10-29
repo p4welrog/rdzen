@@ -4,7 +4,7 @@ Mały język programowania z kontraktami weryfikowanymi statycznie (Z3), projekt
 generowanie kodu przez modele językowe: pełna specyfikacja mieści się w kontekście modelu,
 a kompilator zwraca strukturalną diagnostykę z kontrprzykładami.
 
-- `spec/` — formalna definicja języka (Typst + PDF, wersja 0.4)
+- `spec/` — formalna definicja języka (Typst + PDF, wersja 0.5)
 - `rzc`, `rdzen/` — prototyp kompilatora
 - `REFERENCE.md` — zwięzła referencja dla piszącego kod
 - `SKILL.md` — skill dla Claude: specyfikacja → weryfikacja → generowanie Pythona
@@ -39,7 +39,8 @@ i rekurencyjne), aliasy z uściśleniami (`type Nat = Int where self >= 0`), sta
 (także rekurencyjne i wzajemnie rekurencyjne, z uściślonym wynikiem), `lemma fn`, miary
 strukturalne (`decreases t` dla typów danych), niezmienniki typów danych (`data … where φ`),
 operator `?` dla `Option` i `Result`, napisy (`Str = Array<Byte>`, literały `"…"` i `b'x'`,
-`concat`, `slice`, klasy znaków ASCII),
+`concat`, `slice`, klasy znaków ASCII), typy funkcyjne z uściśleniami (także zależnymi od
+parametrów), domknięcia i funkcje nazwane jako wartości,
 funkcje z `requires`/`ensures`/`decreases`/`examples`, parametry `inout` z prawem wyłączności,
 `let`/`var`, przypisania, `while` z niezmiennikami i wariantem, `for`, `if`, `match`
 ze strażnikami, `break`/`continue`/`return`, `assert`, dziury `?h`, kwantyfikatory ograniczone,
@@ -55,7 +56,16 @@ strukturalna to ranga wartości (1 + suma rang pól tego samego typu). Uściśle
 rekurencyjnej `spec fn` jest dowodzone indukcyjnie (hipoteza dla wywołań o mniejszej mierze)
 i dodawane jako aksjomat dla pozostałych zobowiązań.
 
-Nieobsługiwane (błąd `E0003`/`E2002`): `F64`, typy funkcyjne i domknięcia,
+Wartość typu `fn(x̄: P̄) -> R where ψ` jest tablicą Z3 z hipotezą ∀x̄. P̄(x̄) ⇒ ψ(f(x̄)); domknięcie
+o ciele wyrażalnym w logice jest kodowane dokładnie (`z3.Lambda`), inne — przez typ, a uściślenie
+wyniku z typu oczekiwanego jest dowodzone w jego ciele. Przekazanie funkcji daje zobowiązania
+kontrawariancji parametrów i kowariancji wyniku. Gdy solver nie rozstrzyga zobowiązania
+z parametrem funkcyjnym, hipotezy ∀ są zastępowane instancjami w punktach zastosowania; model
+jest kontrprzykładem, jeśli typ funkcyjny jest punktowo zamieszkany. Niedowiedzione zobowiązania
+typów funkcyjnych w kodzie wynikowym stają się monitorami opakowującymi przekazaną funkcję.
+
+Nieobsługiwane (błąd `E0003`/`E2002`/`E2015`): `F64`, funkcje zwracające funkcje oraz funkcje
+w tablicach, polach i zmiennych `var`,
 kapabilności i efekty poza totalnością, aktorzy, `extern`, `import`, sprawdzanie formy kanonicznej (`E0100`), generowanie kodu C (zamiast niego: Python).
 
 ## Różnice względem specyfikacji

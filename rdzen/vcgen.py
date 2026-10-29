@@ -13,7 +13,7 @@ from .ast import *
 from .check import RT, INT, BOOL, UNIT, subst_rt
 from .smt import Enc, tdiv, trem, INT_MIN, INT_MAX
 from .pp import show
-from .diag import err
+from .diag import err, CompileError
 
 EXPLICIT = {"pre", "post", "inv-init", "inv-pres", "var-nn", "var-dec", "term",
             "refine", "assert", "wd", "data-inv"}
@@ -185,10 +185,14 @@ class Verifier:
         self.str_names = set()     # nazwy zmiennych typu Str (czytelniejsze kontrprzykłady)
         self.recfuns = {}          # (spec, typy) -> RecFunction
         self.ranks = {}            # kształt typu danych -> funkcja rangi
-        self.axioms = []           # rank(x) >= 1
+        self.axioms = []           # (nazwa symbolu, aksjomat): rank(x) >= 1, kontrakty funkcji-wartości
         self.spec_axioms = {}      # spec -> [∀ args. uściślenia parametrów ⇒ uściślenie wyniku]
         self.exclude = frozenset() # specyfikacje, których aksjomatów nie wolno użyć (dowód indukcyjny)
         self.enc.inv_fn = self.inv_term
+        self.enc.fn_hyp_fn = self.fn_hyp
+        self.opaque_fns = set()     # domknięcia nieprzekładalne na z3.Lambda (znane tylko przez typ)
+        self.fn_hyp_info = {}       # id kwantyfikatora typu funkcyjnego -> (q, f, xs, pre, post_of)
+        self.fnvals = {}           # funkcja nazwana użyta jako wartość -> stała Z3
         self.tsub = {}             # podstawienie typów przy tłumaczeniu kontraktów funkcji generycznych
 
     def T(self, rt):
@@ -209,7 +213,22 @@ class Verifier:
                 return env[e.name], T
             if e.name in self.ch.consts:
                 return z3.IntVal(self.ch.consts[e.name].value), T
+            if getattr(e, "fnref", None) is not None:
+                return self.fnval(e.fnref), T
             raise err("E1010", e.span, f"nieznana zmienna `{e.name}`", ["6.1"])
+        if isinstance(e, Call) and getattr(e, "closure", None) is not None:
+            fv = env[e.name]
+            args, w = [], T
+            for a in e.args:
+                t, wa = self.tr(a.expr, env, fx)
+                args.append(t)
+                w = z3.And(w, wa)
+            ft = self.T(e.closure)
+            penv = dict(zip(ft.pnames, args))
+            conds = []
+            for v, pt in zip(args, ft.args[:-1]):
+                conds += self.enc.hyp(v, pt, self.refine_fn(penv), refs_only=True)
+            return z3.Select(fv, *args), z3.And(w, *conds)
         if isinstance(e, SelfRef):
             return fx.self_, T
         if isinstance(e, ResultRef):
@@ -441,7 +460,11 @@ class Verifier:
         if isinstance(e, Name):
             if e.name in st.env:
                 return R([(st, st.env[e.name])])
+            if getattr(e, "fnref", None) is not None:
+                return R([(st, self.fnval(e.fnref))])
             return R([(st, z3.IntVal(self.ch.consts[e.name].value))])
+        if isinstance(e, Lambda):
+            return self.lambda_(e, st)
         if isinstance(e, Hole):
             self.hole(e, st)
             return R()
@@ -615,6 +638,8 @@ class Verifier:
 
     # ================= wywołania =================
     def call(self, e, st):
+        if getattr(e, "closure", None) is not None:
+            return self.closure_call(e, st)
         sig = e.callee
         targs = e.targs or {}
         val_exprs = [a.expr for a in e.args if a.inout is None]
@@ -675,11 +700,20 @@ class Verifier:
         # uściślenia parametrów
         for (pn, pt, pinout), v, a in zip(sig.params, args, e.args):
             pti = subst_rt(pt, targs)
+            if pti.kind == "Fn":
+                s = self.fn_contra(s, a, pn, pti, e)
             conds = self.enc.hyp(v, pti, rf, refs_only=True)
-            if conds:
+            if conds and pti.kind == "Fn" and isinstance(a.expr, Name) and getattr(a.expr, "fnref", None):
+                cov = self.fn_named_cov(a.expr.fnref, pti, pn)
+                conds = [cov] if cov is not None else []
+            if conds and pti.kind == "Fn":
+                text = (f"przekazana funkcja musi spełniać typ parametru `{pn}`: " +
+                        " && ".join(show(rr, {"self": f"{pn}({', '.join(pti.pnames)})"}) for rr in pti.args[-1].refs))
+            elif conds:
                 text = " && ".join(show(rr, {"self": pn}) for rr in _all_refs(pti)) or str(pti)
+            if conds:
                 s = self.ob("pre", s, z3.And(*conds), ("pre", _ref_span(pt), e.span), _ref_span(pt) or a.span,
-                            f"{pn}: {pti} — {text}", site=e.span)
+                            text if pti.kind == "Fn" else f"{pn}: {pti} — {text}", site=e.span)
         for q in decl.requires:
             phi, _ = self.tr(q, cenv, Fx())
             s = self.ob("pre", s, phi, ("pre", q.span, e.span), e.span, show(q), site=e.span)
@@ -1035,8 +1069,169 @@ class Verifier:
             body = val if body is None else z3.If(self.enc.is_ctor(rt, cname, x), val, body)
         z3.RecAddDefinition(f, [x], body)
         y = z3.Const(f"y!rank{len(self.ranks)}", srt)
-        self.axioms.append(z3.ForAll([y], f(y) >= 1, patterns=[f(y)]))
+        self.axioms.append((f.name(), z3.ForAll([y], f(y) >= 1, patterns=[f(y)])))
         return f
+
+    # ================= funkcje jako wartości =================
+    def fn_hyp(self, f, rt):
+        """Znaczenie typu `fn(x̄: P̄) -> R where ψ`: ∀x̄. P̄(x̄) ⇒ ψ(x̄, f(x̄))."""
+        rt = self.T(rt)
+        self.counter_fn = getattr(self, "counter_fn", 0) + 1
+        xs = [z3.Const(f"{pn}!fn{self.counter_fn}", self.enc.sort(pt)) for pn, pt in zip(rt.pnames, rt.args[:-1])]
+        penv = dict(zip(rt.pnames, xs))
+        app = z3.Select(f, *xs)
+        if z3.is_quantifier(f) and f.is_lambda():
+            app = z3.simplify(app)          # β-redukcja
+        post = self.enc.hyp(app, rt.args[-1], self.refine_fn(penv), refs_only=True)
+        if not post:
+            return None
+        pre = []
+        for x, pt in zip(xs, rt.args[:-1]):
+            pre += self.enc.hyp(x, pt, self.refine_fn(penv))
+        body = z3.Implies(z3.And(*pre), z3.And(*post))
+        if z3.is_quantifier(f) and f.is_lambda():
+            return z3.ForAll(xs, body)
+        q = z3.ForAll(xs, body, patterns=[app])
+        res_t = rt.args[-1]
+        post_of = lambda r, penv=penv, res_t=res_t: self.enc.hyp(r, res_t, self.refine_fn(penv), refs_only=True)
+        self.fn_hyp_info[q.get_id()] = (q, f, xs, pre, post_of)
+        return q
+
+    def fnval(self, sig):
+        """Funkcja nazwana jako wartość: stała z aksjomatem kontraktu (bez `requires`, z `ensures`)."""
+        if sig.name in self.fnvals:
+            return self.fnvals[sig.name]
+        ft = self.ch.fn_type_of_sig(sig)
+        f = z3.Const(f"{sig.name}#fn{self.uid}", self.enc.sort(ft))
+        self.fnvals[sig.name] = f
+        xs = [z3.Const(f"{pn}!val{sig.name}", self.enc.sort(pt)) for pn, pt, _ in sig.params]
+        penv = {pn: x for (pn, _, _), x in zip(sig.params, xs)}
+        app = z3.Select(f, *xs)
+        pre, post = self.fn_contract(sig, xs, app)
+        if post:
+            self.axioms.append((str(f), z3.ForAll(xs, z3.Implies(z3.And(*pre), z3.And(*post)), patterns=[app])))
+        return f
+
+    def fn_contract(self, sig, xs, r):
+        """Uściślenia parametrów i postkondycja funkcji nazwanej dla argumentów `xs` i wyniku `r`."""
+        penv = {pn: x for (pn, _, _), x in zip(sig.params, xs)}
+        pre = []
+        for x, (_, pt, _) in zip(xs, sig.params):
+            pre += self.enc.hyp(x, pt, self.refine_fn(penv))
+        post = self.enc.hyp(r, sig.ret, self.refine_fn(penv))
+        for q in sig.decl.ensures:
+            phi, _ = self.tr(q, penv, Fx(result=r))
+            post.append(phi)
+        return pre, post
+
+    def fn_named_cov(self, sig, dst, pn):
+        """Funkcja nazwana przekazana jako wartość typu `dst`: ∀x̄, r. P_dst(x̄) ∧ Post(x̄, r) ⇒ ψ_dst(x̄, r).
+        Postać bez aksjomatu kwantyfikowanego — solver rozstrzyga ją bez `unknown`."""
+        dst = self.T(dst)
+        self.counter_fn = getattr(self, "counter_fn", 0) + 1
+        xs = [z3.Const(f"{n}!v{self.counter_fn}", self.enc.sort(pt)) for n, pt in zip(dst.pnames, dst.args[:-1])]
+        r = z3.Const(f"wynik!v{self.counter_fn}", self.enc.sort(dst.args[-1]))
+        for n, x in zip(dst.pnames, xs):
+            self.desc[str(x)] = (n, f"argument funkcji `{sig.name}` przekazanej jako `{pn}`")
+        self.desc[str(r)] = (f"{sig.name}({', '.join(dst.pnames)})", "wynik zgodny z kontraktem funkcji")
+        denv = dict(zip(dst.pnames, xs))
+        need = self.enc.hyp(r, dst.args[-1], self.refine_fn(denv), refs_only=True)
+        if not need:
+            return None
+        pre = []
+        for x, pt in zip(xs, dst.args[:-1]):
+            pre += self.enc.hyp(x, pt, self.refine_fn(denv))
+        _, post = self.fn_contract(sig, xs, r)
+        # zmienne świeże = kwantyfikacja ogólna zobowiązania; kontrprzykład je pokazuje
+        return z3.Implies(z3.And(*pre, *post), z3.And(*need))
+
+    def fn_src_type(self, expr):
+        return getattr(expr, "fty", None) if isinstance(expr, (Name, Lambda)) else None
+
+    def fn_contra(self, s, a, pn, dst, e):
+        """Przekazanie funkcji: parametry typu docelowego muszą spełniać uściślenia typu źródłowego."""
+        src = self.fn_src_type(a.expr)
+        if src is None or not any(p.refs for p in src.args[:-1]):
+            return s
+        src = self.T(src)
+        self.counter_fn = getattr(self, "counter_fn", 0) + 1
+        xs = [z3.Const(f"{n}!c{self.counter_fn}", self.enc.sort(pt)) for n, pt in zip(dst.pnames, dst.args[:-1])]
+        denv = dict(zip(dst.pnames, xs))
+        senv = dict(zip(src.pnames, xs))
+        for n, x in zip(dst.pnames, xs):
+            self.desc[str(x)] = (n, f"argument dozwolony przez typ parametru `{pn}`")
+        pre, need = [], []
+        for x, pd, ps in zip(xs, dst.args[:-1], src.args[:-1]):
+            pre += self.enc.hyp(x, pd, self.refine_fn(denv))
+            need += self.enc.hyp(x, ps, self.refine_fn(senv), refs_only=True)
+        if not need:
+            return s
+        phi = z3.Implies(z3.And(*pre), z3.And(*need))
+        return self.ob("pre", s, phi, ("pre-fn", a.span), a.span,
+                       f"argumenty dozwolone przez typ parametru `{pn}` muszą spełniać uściślenia parametrów przekazanej funkcji",
+                       site=e.span)
+
+    def lambda_(self, e, st):
+        self.counter_fn = getattr(self, "counter_fn", 0) + 1
+        k = self.counter_fn
+        xs = [z3.Const(f"{pn}!lam{k}", self.enc.sort(self.T(pt))) for (pn, _), pt in zip(e.params, e.ptys)]
+        for (pn, _), x in zip(e.params, xs):
+            self.desc[str(x)] = (pn, f"parametr domknięcia z wiersza {e.span.line}")
+        sb = st
+        hyps = []
+        for (pn, _), x, pt in zip(e.params, xs, e.ptys):
+            sb = sb.bind(pn, x, pt)
+        alias = dict(zip(getattr(e, "alias_pnames", ()), xs))   # nazwy parametrów typu oczekiwanego
+        for (pn, _), x, pt in zip(e.params, xs, e.ptys):
+            hyps += self.enc.hyp(x, self.T(pt), self.refine_fn({**sb.env, **alias}))
+        if hyps:
+            sb = sb.assume(z3.And(*hyps))
+        r = self.ev(e.body, sb)
+        if e.ret_full is not None and _all_refs(e.ret_full):
+            for s2, v in r.outs:
+                conds = self.enc.hyp(v, self.T(e.ret_full), self.refine_fn({**s2.env, **alias}), refs_only=True)
+                if conds:
+                    self.ob("refine", s2, z3.And(*conds), ("refine", _ref_span(e.ret_full), e.span), e.span,
+                            " && ".join(show(x_, {"self": "wynik", **{an: pn for an, (pn, _) in
+                                                   zip(getattr(e, "alias_pnames", ()), e.params)}})
+                                        for x_ in _all_refs(e.ret_full)) + " (wynik domknięcia)",
+                            label=None)
+        env_t = dict(st.env)
+        env_t.update({pn: x for (pn, _), x in zip(e.params, xs)})
+        try:
+            body_t, _ = self.tr(e.body, env_t, Fx())
+            return R([(st, z3.Lambda(xs, body_t))])
+        except (CompileError, z3.Z3Exception, KeyError, AttributeError):
+            pass
+        f = self.enc.fresh("fn", self.T(e.fty))
+        self.desc[str(f)] = ("‹domknięcie›", f"domknięcie z wiersza {e.span.line}")
+        self.opaque_fns.add(str(f))
+        h = self.fn_hyp(f, e.fty)
+        # domknięcie znane tylko przez typ: kontrprzykłady przez nie są indukcyjne
+        return R([(st.assume(h if h is not None else z3.BoolVal(True), inductive=True), f)])
+
+    def closure_call(self, e, st):
+        ft = self.T(e.closure)
+        r = self.ev_seq([a.expr for a in e.args], st)
+        out = R(brks=r.brks, conts=r.conts)
+        for s, args in r.outs:
+            fv = s.env[e.name]
+            penv = dict(zip(ft.pnames, args))
+            for v, pt, pn in zip(args, ft.args[:-1], ft.pnames):
+                conds = self.enc.hyp(v, pt, self.refine_fn(penv), refs_only=True)
+                if conds:
+                    txt = " && ".join(show(x_, {"self": pn}) for x_ in pt.refs)
+                    s = self.ob("pre", s, z3.And(*conds), ("pre", _ref_span(pt), e.span), e.span,
+                                f"{pn}: {txt}", site=e.span)
+            res = z3.Select(fv, *args)
+            post = self.enc.hyp(res, ft.args[-1], self.refine_fn(penv))
+            if post:
+                # parametr funkcyjny: każda funkcja danego typu jest możliwym argumentem,
+                # więc kontrprzykład nie wynika z abstrakcji (por. solve_ground)
+                is_param = any(pn == e.name for pn, _, _ in self.cur.sig.params)
+                s = s.assume(z3.And(*post), f"wynik `{e.name}`", inductive=not is_param)
+            out.outs.append((s, res))
+        return out
 
     def inv_term(self, rt, v):
         """Niezmiennik typu danych zastosowany do wartości v."""
@@ -1214,7 +1409,7 @@ class Verifier:
         s = z3.Solver()
         s.set("rlimit", self.rlimit)
         s.set("random_seed", 0)
-        for ax in self.axioms_for(o.exclude):
+        for ax in self.axioms_for(o.exclude, list(o.pc) + [o.phi]):
             s.add(ax)
         for c in o.pc:
             s.add(c)
@@ -1230,9 +1425,99 @@ class Verifier:
                 o.model = small
         else:
             o.status = "unknown"
+            self.solve_ground(o)
 
-    def axioms_for(self, exclude):
-        out = list(self.axioms)
+    def solve_ground(self, o):
+        """`unknown` przy hipotezach typów funkcyjnych: hipotezy ∀ zastępuje się ich instancjami
+        w punktach, w których funkcja jest stosowana. Model jest prawdziwym kontrprzykładem, jeśli
+        typ funkcyjny jest zamieszkany punktowo (∀x̄. P(x̄) ⇒ ∃y. ψ(x̄, y)) — wtedy funkcję zgodną
+        z modelem w tych punktach da się przedłużyć na całą dziedzinę."""
+        exprs = list(o.pc) + [o.phi]
+        found = {}
+        stack, seen = list(exprs), set()
+        while stack:
+            e = stack.pop()
+            if e.get_id() in seen:
+                continue
+            seen.add(e.get_id())
+            if z3.is_quantifier(e):
+                if e.get_id() in self.fn_hyp_info:
+                    found[e.get_id()] = self.fn_hyp_info[e.get_id()]
+                stack.append(e.body())
+            elif z3.is_app(e):
+                stack.extend(e.children())
+        if not found or used_symbols(exprs) & self.opaque_fns:
+            return
+        # zastosowanie funkcji pod innym kwantyfikatorem: instancje nie pokryłyby wszystkich
+        # punktów, model mógłby być fałszywym kontrprzykładem — rezygnacja
+        fs = [info[1] for info in found.values()]
+        def under_q(e, inside, sn):
+            k = (e.get_id(), inside)
+            if k in sn:
+                return False
+            sn.add(k)
+            if z3.is_quantifier(e):
+                if e.get_id() in found:
+                    return False
+                return under_q(e.body(), True, sn)
+            if z3.is_app(e):
+                if inside and e.decl().kind() == z3.Z3_OP_SELECT and any(e.arg(0).eq(f) for f in fs):
+                    return True
+                return any(under_q(c, inside, sn) for c in e.children())
+            return False
+        if any(under_q(x, False, set()) for x in exprs):
+            return
+        # punkty zastosowania funkcji (dwie rundy: instancje wprowadzają nowe zastosowania)
+        def selects(es, f):
+            out, st, sn = {}, list(es), set()
+            while st:
+                e = st.pop()
+                if e.get_id() in sn or z3.is_quantifier(e):
+                    continue
+                sn.add(e.get_id())
+                if z3.is_app(e):
+                    if (e.decl().kind() == z3.Z3_OP_SELECT and e.arg(0).eq(f)):
+                        out[e.get_id()] = [e.arg(i) for i in range(1, e.num_args())]
+                    st.extend(e.children())
+            return list(out.values())
+        ground = list(o.pc)
+        insts = []
+        for _ in range(2):
+            new = []
+            for q, f, xs, pre, post_of in found.values():
+                for ts in selects(ground + insts + [o.phi], f):
+                    sub = list(zip(xs, ts))
+                    inst = z3.Implies(z3.substitute(z3.And(*pre), *sub) if pre else z3.BoolVal(True),
+                                      z3.And(*post_of(z3.Select(f, *ts))))
+                    new.append(z3.substitute(inst, *sub) if sub else inst)
+            insts = new
+        ground = [z3.substitute(c, *[(q, z3.BoolVal(True)) for q, *_ in found.values()]) for c in o.pc]
+        s = z3.Solver()
+        s.set("rlimit", self.rlimit)
+        s.set("random_seed", 0)
+        for ax in self.axioms_for(o.exclude, exprs):
+            s.add(ax)
+        s.add(*ground, *insts, z3.Not(o.phi))
+        if s.check() != z3.sat:
+            return
+        m = s.model()
+        for q, f, xs, pre, post_of in found.values():
+            sv = z3.Solver()
+            sv.set("rlimit", self.rlimit)
+            ys = z3.FreshConst(f.sort().range(), "y")
+            post = post_of(ys)
+            inhabited = z3.ForAll(xs, z3.Implies(z3.And(*pre), z3.Exists([ys], z3.And(*post)))) if post else z3.BoolVal(True)
+            sv.add(z3.Not(inhabited))
+            if sv.check() != z3.unsat:
+                return
+        o.status = "refuted"
+        o.model = m
+
+    def axioms_for(self, exclude, exprs=None):
+        """Aksjomaty dla zobowiązania; z `exprs` tylko te, których symbol w nim występuje
+        (mniej kwantyfikatorów w kontekście = częściej model zamiast `unknown`)."""
+        used = used_symbols(exprs) if exprs is not None else None
+        out = [ax for name, ax in self.axioms if used is None or name in used]
         for name, axs in self.spec_axioms.items():
             if name not in exclude:
                 out += axs
@@ -1282,6 +1567,25 @@ class Verifier:
             s.add(c)
         s.add(z3.Not(phi))
         return s.check() == z3.unsat
+
+
+def used_symbols(exprs):
+    """Nazwy stałych i funkcji nieinterpretowanych (także rekurencyjnych) w wyrażeniach."""
+    seen, names, stack = set(), set(), list(exprs)
+    while stack:
+        e = stack.pop()
+        if e.get_id() in seen:
+            continue
+        seen.add(e.get_id())
+        if z3.is_quantifier(e):
+            stack.append(e.body())
+            continue
+        if z3.is_app(e):
+            d = e.decl()
+            if d.kind() in (z3.Z3_OP_UNINTERPRETED, z3.Z3_OP_RECURSIVE):
+                names.add(d.name())
+            stack.extend(e.children())
+    return names
 
 
 def _patstr(p):

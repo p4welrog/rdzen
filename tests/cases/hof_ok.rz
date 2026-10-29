@@ -1,0 +1,66 @@
+// expect: ok
+fn apply(f: fn(Int) -> Int, x: Int) -> Int {
+    f(x)
+}
+
+fn snapshot() -> Int
+    ensures result == 2
+    examples {
+        snapshot() == 2
+    }
+{
+    var y = 1
+    let f = fn(x: Int where 0 <= self && self <= 10) => x + y
+    y = 100
+    f(1)
+}
+
+fn snapshot_array() -> Int
+    ensures result == 1
+    examples {
+        snapshot_array() == 1
+    }
+{
+    var a = [1, 2]
+    let first = fn(i: Int where self == 0) => a[i]
+    a[0] = 50
+    first(0)
+}
+
+fn compose_like(xs: Array<Int>) -> Bool
+    requires xs.len < 100
+{
+    let pos = fn(x: Int) => x > 0
+    let n = count_if(xs, pos)
+    n <= xs.len
+}
+
+fn count_if(xs: Array<Int>, p: fn(Int) -> Bool) -> Nat
+    ensures result <= xs.len
+{
+    var c = 0
+    for x in xs
+        invariant 0 <= c && c <= it
+    {
+        if p(x) {
+            c = c + 1
+        }
+    }
+    c
+}
+
+fn neg(x: Int where self > int_min) -> Int where self == -x {
+    -x
+}
+
+fn use_neg() -> Int
+    ensures result == -5
+{
+    apply_pos(neg, 5)
+}
+
+fn apply_pos(f: fn(x: Int where self > 0) -> Int, x: Int where self > 0) -> Int
+    ensures result == f(x)
+{
+    f(x)
+}

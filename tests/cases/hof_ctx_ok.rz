@@ -1,0 +1,17 @@
+// expect: ok
+// Domknięcie nieprzekładalne na formułę: uściślenie wyniku z typu oczekiwanego dowodzone w ciele.
+fn apply(f: fn(x: Int where self < 1000) -> Int where self > x, a: Int where self < 1000) -> Int
+    ensures result > a
+{
+    f(a)
+}
+
+fn inc(x: Int where self < 1000000) -> Int where self == x + 1 {
+    x + 1
+}
+
+fn use_it(a: Int where self < 1000) -> Int
+    ensures result > a
+{
+    apply(fn(y) => inc(y), a)
+}

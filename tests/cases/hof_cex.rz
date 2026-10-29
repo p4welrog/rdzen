@@ -1,0 +1,8 @@
+// expect: E4020
+// Typ parametru dopuszcza funkcję stałą w punkcie (f(x) >= x), więc f(f(a)) > a + 1 nie wynika.
+fn apply_twice(f: fn(x: Int where self < 1000000) -> Int where self >= x && self <= x + 10, a: Int) -> Int
+    requires a < 1000
+    ensures result > a + 1
+{
+    f(f(a))
+}

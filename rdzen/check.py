@@ -18,12 +18,13 @@ class RT:
     name: Optional[str] = None
     args: list = field(default_factory=list)
     refs: list = field(default_factory=list)      # formuły z `self`
+    pnames: tuple = ()                            # Fn: nazwy parametrów (uściślenia zależne)
 
     def shape(self):
         return (self.kind, self.name, tuple(a.shape() for a in self.args))
 
     def bare(self) -> "RT":
-        return RT(self.kind, self.name, [a.bare() for a in self.args], [])
+        return RT(self.kind, self.name, [a.bare() for a in self.args], [], self.pnames)
 
     def __str__(self):
         if self.kind in ("Int", "Bool", "Unit", "Never"):
@@ -32,6 +33,8 @@ class RT:
             s = f"Array<{self.args[0]}>"
         elif self.kind == "Var":
             s = self.name
+        elif self.kind == "Fn":
+            s = "fn(" + ", ".join(map(str, self.args[:-1])) + f") -> {self.args[-1]}"
         else:
             s = self.name + (f"<{', '.join(map(str, self.args))}>" if self.args else "")
         return s
@@ -49,8 +52,8 @@ def same(a: RT, b: RT) -> bool:
 def subst_rt(t: RT, s: dict) -> RT:
     if t.kind == "Var" and t.name in s:
         r = s[t.name]
-        return RT(r.kind, r.name, r.args, r.refs + t.refs)
-    return RT(t.kind, t.name, [subst_rt(a, s) for a in t.args], t.refs)
+        return RT(r.kind, r.name, r.args, r.refs + t.refs, r.pnames)
+    return RT(t.kind, t.name, [subst_rt(a, s) for a in t.args], t.refs, t.pnames)
 
 
 def unify(pat: RT, act: RT, s: dict, tvars: set) -> bool:
@@ -169,6 +172,14 @@ class Checker:
 
     # ---------- typy z wyrażeń typowych ----------
     def resolve(self, t: Node, tvars: list) -> RT:
+        if isinstance(t, TFn):
+            ps = [self.resolve(pt, tvars) for _, pt in t.params]
+            ret = self.resolve(t.ret, tvars)
+            for x in ps + [ret]:
+                if contains_fn(x):
+                    raise err("E2015", t.span, "typ funkcyjny nie może zawierać typów funkcyjnych (prototyp: funkcje tylko pierwszego rzędu jako argumenty)", ["3.1"])
+            names = tuple(n if n is not None else f"_{i}" for i, (n, _) in enumerate(t.params))
+            return RT("Fn", None, ps + [ret], [], names)
         if isinstance(t, TRefine):
             base = self.resolve(t.base, tvars)
             return RT(base.kind, base.name, base.args, base.refs + [t.formula])
@@ -183,6 +194,8 @@ class Checker:
             if args:
                 raise err("E2001", t.span, f"typ `{n}` nie przyjmuje argumentów", ["3.1"])
             return RT(n)
+        if any(contains_fn(a) for a in args):
+            raise err("E2015", t.span, "typ funkcyjny nie może być argumentem typu (tablice i typy danych funkcji nie są obsługiwane)", ["3.1"])
         if n == "Array":
             if len(args) != 1:
                 raise err("E2001", t.span, "typ `Array` przyjmuje dokładnie jeden argument", ["3.1"])
@@ -220,6 +233,8 @@ class Checker:
             if isinstance(it, DataDecl):
                 try:
                     it.rctors = [(c.name, [(fn, self.resolve(ft, it.tparams)) for fn, ft in c.fields]) for c in it.ctors]
+                    if any(contains_fn(ft) for _, fs in it.rctors for _, ft in fs):
+                        raise err("E2015", it.span, "pole typu danych nie może mieć typu funkcyjnego", ["3.1"])
                     for c in it.ctors:
                         if c.name in self.ctor_of:
                             raise err("E1003", c.span, f"konstruktor `{c.name}` zadeklarowano wielokrotnie", ["3.4"])
@@ -247,6 +262,10 @@ class Checker:
                     if len(set(names)) != len(names):
                         raise err("E1005", it.span, "powtórzona nazwa parametru", ["3.4"])
                     ret = self.resolve(it.ret, it.tparams) if it.ret else UNIT
+                    if contains_fn(ret):
+                        raise err("E2015", it.ret.span, "funkcja nie może zwracać funkcji (prototyp)", ["3.1"])
+                    if any(contains_fn(p[1]) and p[2] for p in params):
+                        raise err("E2015", it.span, "parametr typu funkcyjnego nie może być `inout`", ["3.1"])
                     sig = FnSig(it.name, it.tparams, params, ret, it.requires, it.ensures,
                                 it.decreases, it.partial, False, False, it)
                     it.sig = sig
@@ -312,6 +331,13 @@ class Checker:
         return self.diags
 
     def check_refs(self, rt: RT, env, fn):
+        if rt.kind == "Fn":
+            env2 = dict(env)
+            for pn, pt in zip(rt.pnames, rt.args[:-1]):
+                self.check_refs(pt, env, fn)
+                env2[pn] = VarInfo(pt, "param")
+            self.check_refs(rt.args[-1], env2, fn)
+            return
         for r in rt.refs:
             t = self.infer(r, env, Ctx(fn, formula=True, allow_self=rt.bare()), BOOL)
             self.expect_ty(r, t, BOOL)
@@ -401,6 +427,11 @@ class Checker:
             if want is not None:
                 self.expect_ty(s.expr, t, want)
                 t = want
+            if t.kind == "Fn":
+                if s.mutable:
+                    raise err("E2015", s.span, "zmienna typu funkcyjnego musi być niemutowalna (`let`)", ["3.1"])
+                if want is None and getattr(s.expr, "fty", None) is not None:
+                    t = s.expr.fty
             s.rt = t
             env[s.name] = VarInfo(t, "var" if s.mutable else "let")
             return UNIT
@@ -408,6 +439,8 @@ class Checker:
             vi = env.get(s.name)
             if vi is None:
                 raise err("E1010", s.span, f"nieznana zmienna `{s.name}`", ["5.2"])
+            if vi.kind == "cap":
+                raise err("E6010", s.span, f"domknięcie nie może zmieniać przechwyconej zmiennej `{s.name}`", ["4.6"])
             if vi.kind not in ("var", "inout"):
                 raise err("E2110", s.span, f"przypisanie do zmiennej niemutowalnej `{s.name}`", ["5.2"],
                           fix={"patch": f"zadeklaruj `{s.name}` przez `var` zamiast `let`", "confidence": "suggested"})
@@ -494,10 +527,18 @@ class Checker:
             return UNIT
         if isinstance(e, Name):
             if e.name in env:
-                return env[e.name].rt.bare()
+                rt = env[e.name].rt
+                if rt.kind == "Fn":
+                    e.fty = rt
+                return rt.bare()
             if e.name in self.consts:
                 return INT
+            sig = self.fns.get(e.name)
+            if sig is not None and not sig.builtin:
+                return self.fn_ref(e, sig, ctx)
             raise err("E1010", e.span, f"nieznana zmienna `{e.name}`", ["5.2"])
+        if isinstance(e, Lambda):
+            return self.lambda_(e, env, ctx, expected)
         if isinstance(e, SelfRef):
             if ctx.allow_self is None:
                 raise err("E2130", e.span, "`self` dozwolone tylko w uściśleniu typu", ["6.1"])
@@ -593,6 +634,114 @@ class Checker:
             return self.block(e.block, env, ctx, expected)
         raise err("E0099", e.span, f"nieobsługiwane wyrażenie {type(e).__name__}", [])
 
+    # ---------- funkcje jako wartości ----------
+    def fn_type_of_sig(self, sig):
+        return RT("Fn", None, [pt for _, pt, _ in sig.params] + [sig.ret], [], tuple(pn for pn, _, _ in sig.params))
+
+    def fn_ref(self, e, sig, ctx):
+        """Nazwa funkcji globalnej użyta jako wartość."""
+        d = sig.decl
+        why = None
+        if d.lemma:
+            why = "lemat"
+        elif sig.partial:
+            why = "funkcja częściowa"
+        elif sig.tparams:
+            why = "funkcja generyczna"
+        elif any(p[2] for p in sig.params):
+            why = "funkcja z parametrem `inout`"
+        elif d.requires:
+            why = "funkcja z `requires` (zapisz warunek w typie parametru, np. `x: Int where self > 0`)"
+        elif any(contains_fn(p[1]) for p in sig.params):
+            why = "funkcja wyższego rzędu"
+        if why:
+            raise err("E3016", e.span, f"`{e.name}` nie może być użyta jako wartość: {why}", ["4.6"])
+        e.fnref = sig
+        e.fty = self.fn_type_of_sig(sig)
+        return e.fty.bare()
+
+    def lambda_(self, e, env, ctx, expected):
+        if ctx.formula:
+            raise err("E6104", e.span, "domknięcia nie są dozwolone w formułach", ["6.1"])
+        exp = expected if expected is not None and expected.kind == "Fn" else None
+        if exp is not None and len(exp.args) - 1 != len(e.params):
+            raise err("E2013", e.span, f"domknięcie ma {len(e.params)} parametrów, oczekiwano {len(exp.args) - 1}", ["5.2"])
+        tvars = ctx.fn.tparams if ctx.fn else []
+        ptys = []
+        for i, (pn, pt) in enumerate(e.params):
+            if pt is not None:
+                t = self.resolve(pt, tvars)
+                if exp is not None and not same(t.bare(), exp.args[i].bare()):
+                    raise err("E2011", pt.span, f"typ parametru `{pn}` niezgodny z oczekiwanym", ["5.2"],
+                              expected=str(exp.args[i]), found=str(t))
+                if exp is not None and t.refs and [id(r) for r in t.refs] != [id(r) for r in exp.args[i].refs]:
+                    raise err("E2141", pt.span, f"parametr domknięcia `{pn}` ma uściślenie inne niż typ oczekiwany — "
+                              "pomiń adnotację, typ zostanie przejęty z kontekstu", ["4.6"], expected=str(exp.args[i]))
+            elif exp is not None:
+                t = exp.args[i]
+                if any(n.kind == "Var" for n in _iter_rt(t)):
+                    raise err("E2012", e.span, f"nie można wywnioskować typu parametru `{pn}` — dodaj adnotację", ["5.5"])
+            else:
+                raise err("E2012", e.span, f"brak typu parametru `{pn}` domknięcia — dodaj adnotację", ["5.5"])
+            if contains_fn(t):
+                raise err("E2015", e.span, "parametr domknięcia nie może być funkcją (prototyp)", ["3.1"])
+            ptys.append(t)
+        for n in walk(e.body):
+            bad = None
+            if isinstance(n, (While, For)):
+                bad = "pętle"
+            elif isinstance(n, (Return, Break, Continue)):
+                bad = "`return`/`break`/`continue`"
+            elif isinstance(n, (Assign, IndexAssign)):
+                bad = "przypisania"
+            elif isinstance(n, Call) and any(a.inout for a in n.args):
+                bad = "argumenty `inout`"
+            elif isinstance(n, Lambda):
+                bad = "zagnieżdżone domknięcia"
+            if bad:
+                raise err("E3015", n.span, f"ciało domknięcia jest wyrażeniem bez efektów: {bad} są niedozwolone "
+                          "(użyj nazwanej funkcji)", ["4.6"])
+        benv = {k: VarInfo(v.rt, "cap" if v.kind in ("var", "inout") else "let") for k, v in env.items()}
+        for (pn, _), t in zip(e.params, ptys):
+            benv[pn] = VarInfo(t, "param")
+        ret_full = self.resolve(e.ret, tvars) if e.ret is not None else None
+        if ret_full is not None:
+            self.check_refs(ret_full, {**benv, "result": None} if False else benv, ctx.fn)
+        want = ret_full.bare() if ret_full is not None else (exp.args[-1].bare() if exp is not None and not any(
+            n.kind == "Var" for n in _iter_rt(exp.args[-1])) else None)
+        bt = self.infer(e.body, benv, Ctx(ctx.fn, formula=False, in_loop=False), want)
+        if want is not None:
+            self.expect_ty(e.body, bt, want)
+        if contains_fn(bt):
+            raise err("E2015", e.span, "domknięcie nie może zwracać funkcji (prototyp)", ["3.1"])
+        if exp is not None and not any(n.kind == "Var" for n in _iter_rt(exp.args[-1])):
+            # typ oczekiwany wyznacza typ domknięcia; uściślenie wyniku z kontekstu jest
+            # dowodzone w ciele domknięcia (nie przy przekazaniu)
+            if ret_full is None and exp.args[-1].refs:
+                ret_full = exp.args[-1]
+            elif ret_full is not None and ret_full.refs and exp.args[-1].refs and \
+                    [id(r) for r in ret_full.refs] != [id(r) for r in exp.args[-1].refs]:
+                raise err("E2141", e.ret.span, "wynik domknięcia ma uściślenie inne niż typ oczekiwany — "
+                          "pomiń adnotację, typ zostanie przejęty z kontekstu", ["4.6"], expected=str(exp.args[-1]))
+        e.alias_pnames = tuple(exp.pnames) if exp is not None and len(exp.pnames) == len(e.params) else ()
+        rt_ = ret_full if ret_full is not None else bt.bare()
+        e.fty = RT("Fn", None, ptys + [rt_], [], e.alias_pnames or tuple(pn for pn, _ in e.params))
+        e.ptys = ptys
+        e.ret_full = ret_full
+        return e.fty.bare()
+
+    def closure_call(self, e, env, ctx):
+        ft = env[e.name].rt
+        if len(e.args) != len(ft.args) - 1:
+            raise err("E2013", e.span, f"`{e.name}` przyjmuje {len(ft.args) - 1} argumentów, podano {len(e.args)}", ["5.2"])
+        for a, pt in zip(e.args, ft.args[:-1]):
+            if a.inout:
+                raise err("E6003", a.span, "funkcje-wartości nie przyjmują argumentów `inout`", ["5.4"])
+            self.expect_ty(a.expr, self.infer(a.expr, env, ctx, pt.bare()), pt.bare())
+        e.callee = None
+        e.closure = ft
+        return ft.args[-1].bare()
+
     def try_(self, e, env, ctx, expected):
         """`e?` (§4.2): elaboracja do `match` z wczesnym powrotem."""
         if ctx.formula or ctx.fn is None:
@@ -651,6 +800,8 @@ class Checker:
         else:
             tr = self.infer(e.right, env, ctx, tl)
         self.expect_ty(e.right, tr, tl)
+        if tl.kind == "Fn":
+            raise err("E2031", e.span, "funkcji nie można porównywać `==`", ["5.5"])
         inner = tl.args[0] if tl.kind == "Array" else tl
         if has_array(inner, self.data):
             raise err("E2030", e.span, "porównanie `==` typów złożonych zawierających tablice nie jest obsługiwane w prototypie", ["5.5"],
@@ -700,6 +851,10 @@ class Checker:
             e.callee = sf
             e.targs = s
             return subst_rt(sf.rret, s).bare()
+        if e.name in env and env[e.name].rt.kind == "Fn":
+            return self.closure_call(e, env, ctx)
+        if e.name in env and env[e.name].rt.kind == "Never":
+            return NEVER          # zmienna skażona wcześniejszym błędem — bez kaskady
         sig = self.fns.get(e.name)
         if sig is None:
             raise err("E1012", e.span, f"nieznana funkcja `{e.name}`", ["5.2"])
@@ -729,7 +884,10 @@ class Checker:
             else:
                 want = subst_rt(pt, s).bare()
                 known = not any(n.kind == "Var" and n.name in tv for n in _iter_rt(want))
-                t = self.infer(a.expr, env, ctx, want if known else None)
+                if isinstance(a.expr, Lambda):
+                    t = self.infer(a.expr, env, ctx, subst_rt(pt, s))
+                else:
+                    t = self.infer(a.expr, env, ctx, want if known else None)
             if not unify(pt.bare(), t, s, tv):
                 raise err("E2011", a.span, f"niezgodność typu argumentu `{pn}`", ["5.2"], expected=str(subst_rt(pt, s).bare()), found=str(t))
         if expected is not None:
@@ -856,10 +1014,14 @@ class Checker:
     # ---------- rekursja i totalność ----------
     def check_recursion(self):
         graph = {f.name: set() for f in self.user_fns}
+        refs = {f.name: [] for f in self.user_fns}
         for f in self.user_fns:
             for n in walk(f.body):
                 if isinstance(n, Call) and n.name in graph:
                     graph[f.name].add(n.name)
+                if isinstance(n, Name) and getattr(n, "fnref", None) is not None and n.name in graph:
+                    graph[f.name].add(n.name)
+                    refs[f.name].append(n)
         # Tarjan
         index, low, stack, on, comps, cnt = {}, {}, [], set(), [], [0]
 
@@ -886,11 +1048,19 @@ class Checker:
             for v in comp:
                 self.scc[v] = frozenset(comp)
         for f in self.user_fns:
+            for n in refs[f.name]:
+                if n.name in self.scc[f.name]:
+                    self.error(err("E3016", n.span, f"`{n.name}` nie może być użyta jako wartość wewnątrz własnej "
+                                   "składowej rekurencji (brak dowodu terminacji)", ["4.6"]))
             rec = len(self.scc[f.name]) > 1 or f.name in graph[f.name]
             f.recursive = rec
             if rec and not f.partial and f.decreases is None:
                 self.error(err("E3011", f.span, f"funkcja rekurencyjna `{f.name}` bez `decreases` w funkcji totalnej", ["5.3"],
                                notes=["dodaj miarę `decreases t` albo oznacz funkcję jako `partial`"]))
+
+
+def contains_fn(t: RT) -> bool:
+    return t.kind == "Fn" or any(contains_fn(a) for a in t.args)
 
 
 def _iter_rt(t: RT):

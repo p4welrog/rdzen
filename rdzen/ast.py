@@ -33,6 +33,14 @@ class TName(Node):
 
 
 @dataclass(eq=False)
+class TFn(Node):
+    """Typ funkcyjny `fn(x: A, B) -> R` (nazwy parametrów opcjonalne, do uściśleń zależnych)."""
+    params: list            # [(nazwa | None, typ)]
+    ret: Node
+    span: Span = NOSPAN
+
+
+@dataclass(eq=False)
 class TRefine(Node):
     base: Node
     formula: Node
@@ -353,6 +361,15 @@ class SelfRef(Node):
 
 
 @dataclass(eq=False)
+class Lambda(Node):
+    """Domknięcie `fn(x: T, y) -> R => e` (typy parametrów opcjonalne przy typie oczekiwanym)."""
+    params: list            # [(nazwa, typ | None)]
+    ret: Optional[Node]
+    body: Node
+    span: Span = NOSPAN
+
+
+@dataclass(eq=False)
 class Try(Node):
     """Operator `?` — elaborowany przez kontroler typów do `match` (pole `desugared`)."""
     expr: Node
@@ -368,7 +385,7 @@ class Hole(Node):
 
 # atrybuty dodawane przez kolejne fazy (typy, rozwiązane deklaracje), które nie są dziećmi w AST
 NON_CHILD = {"span", "ty", "callee", "targs", "data", "sig", "env", "fn", "desugared",
-             "rt", "target_rt", "rret", "rparams", "rctors"}
+             "rt", "target_rt", "rret", "rparams", "rctors", "fty", "fnref"}
 
 
 def walk(node):

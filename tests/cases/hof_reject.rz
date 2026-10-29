@@ -1,0 +1,33 @@
+// expect: E3015, E3016, E2015
+fn loopy(xs: Array<Int>) -> Int {
+    let f = fn(x: Int) => {
+        var s = 0
+        while s < x
+            decreases x - s
+        {
+            s = s + 1
+        }
+        s
+    }
+    f(3)
+}
+
+fn self_ref(n: Nat) -> Int
+    decreases n
+{
+    apply(self_ref, n)
+}
+
+fn apply(f: fn(Nat) -> Int, n: Nat) -> Int {
+    f(n)
+}
+
+fn arr_of_fns(fs: Array<fn(Int) -> Int>) -> Int {
+    0
+}
+
+fn mutate_capture() -> Int {
+    var y = 1
+    let f = fn(x: Int) => { y = 2; x }
+    f(0)
+}

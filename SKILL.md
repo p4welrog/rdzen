@@ -12,8 +12,10 @@ sprawdzenia czasu wykonania zostają tylko tam, gdzie dowodu nie znaleziono.
 Używaj, gdy liczy się poprawność: algorytmy na tablicach, wyszukiwanie, sortowanie, operacje
 z granicami i przepełnieniami, logika z przypadkami, drzewa i listy (typy algebraiczne,
 rekursja strukturalna, lematy indukcyjne). Napisy są obsługiwane jako tablice bajtów UTF-8
-(parsery, walidatory, przekształcenia tekstu). Nie używaj do kodu z plikami, siecią, liczbami
-zmiennoprzecinkowymi ani domknięciami — prototyp ich nie obsługuje; wtedy napisz zwykły kod.
+(parsery, walidatory, przekształcenia tekstu). Funkcje wyższego rzędu (`map`, `filter`,
+`fold`, predykaty i komparatory jako parametry) są obsługiwane z uściśleniami w typach
+funkcyjnych. Nie używaj do kodu z plikami, siecią ani liczbami zmiennoprzecinkowymi —
+prototyp ich nie obsługuje; wtedy napisz zwykły kod.
 
 ## 1. Przygotowanie kompilatora
 
@@ -86,6 +88,7 @@ wykonania. Wynik to moduł Pythona (`rzc emit`).
 | `data T { … } where φ` | niezmiennik typu (`self` = wartość); sprawdzany przy każdej konstrukcji, zakładany dla każdej wartości typu |
 | `T where φ` | typ uściślony, `self` oznacza wartość, np. `Int where self >= 0` |
 | `type N = …` | alias, np. `type Percent = Int where 0 <= self && self <= 100` |
+| `fn(x: A, y: B) -> R` | typ funkcyjny; uściślenia parametrów i wyniku (wynik może zależeć od parametrów: `fn(x: Int) -> Int where self > x`); tylko jako typ parametru, `let` lub parametru `spec fn` |
 
 Literały: `"tekst\n"` (bajty UTF-8: `"ść".len == 4`; sekwencje `\n \t \r \0 \\ \" \' \u{XXXX}`),
 `b'a'` (jeden bajt, typ `Byte`). Napisy porównuje się `==`.
@@ -93,7 +96,9 @@ Literały: `"tekst\n"` (bajty UTF-8: `"ść".len == 4`; sekwencje `\n \t \r \0 \
 Preludium: `Option<T> { None, Some(value: T) }`, `Result<T, E> { Ok(value: T), Err(error: E) }`,
 `Ordering { Less, Equal, Greater }`, `type Nat = Int where self >= 0`, stałe `int_min`, `int_max`.
 
-Brak w prototypie: `F64`, typów funkcyjnych i domknięć, `extern`, `import`, aktorów.
+Brak w prototypie: `F64`, `extern`, `import`, aktorów; funkcji zwracających funkcje, funkcji
+w tablicach i polach typów danych, parametrów funkcyjnych `inout` oraz zmiennych `var` typu
+funkcyjnego (`E2015`).
 
 ### 3. Deklaracje
 
@@ -174,7 +179,28 @@ match e {
 return e    break    continue    assert φ
 let v = e?                 // Option w funkcji zwracającej Option: None → return None
                            // Result<_, E> w funkcji zwracającej Result<_, E>: Err(x) → return Err(x)
+map(xs, fn(x) => x * 2)    // domknięcie; typy parametrów i wyniku z kontekstu
+let lim = 5
+let p = fn(x: Int) -> Bool => x > lim   // poza kontekstem: adnotacja typów parametrów
+filter(xs, inc_ok)         // funkcja nazwana jako wartość
 ```
+
+**Funkcje jako wartości.**
+- Domknięcie `fn(x, y) => e` — ciało jest wyrażeniem bez efektów: bez pętli, `return`,
+  `break`/`continue`, przypisań, argumentów `inout`, zagnieżdżonych domknięć (`E3015`); do tego
+  służy funkcja nazwana. Przechwytuje wartości zmiennych z chwili utworzenia.
+- Gdy typ oczekiwany jest znany (argument, `let f: T = …`), domknięcie dostaje ten typ: parametry
+  spełniają jego uściślenia, a uściślenie wyniku jest dowodzone w ciele domknięcia (`E4050`).
+  Własna adnotacja z innym uściśleniem — `E2141` (pomiń ją).
+- Funkcja nazwana jako wartość: bez `requires` (warunek zapisz w typie parametru,
+  `x: Int where self > 0`), bez `inout`, nie generyczna, nie częściowa, nie lemat, bez parametrów
+  funkcyjnych, nie wewnątrz własnej rekursji (`E3016`). Znaczy tyle, ile jej kontrakt (`ensures`,
+  uściślenie wyniku).
+- Przekazanie funkcji do parametru typu `fn(x: P) -> R where ψ` daje zobowiązanie `pre` (`E4010`):
+  argumenty dozwolone przez `P` spełniają uściślenia parametrów przekazanej funkcji, a jej wynik
+  spełnia `ψ`. Wewnątrz funkcji przyjmującej `f` wiadomo o `f(x)` tylko `ψ`.
+- Funkcji nie porównuje się `==` (`E2031`). Domknięć nie ma w formułach; parametr funkcyjny
+  można wywołać w `ensures` (`ensures result == f(x)`).
 
 Ostatnie wyrażenie bloku jest jego wartością. `match` musi być wyczerpujący (gałęzie ze
 strażnikiem `if` się nie liczą). Operatory: `+ - * / %` (dzielenie obcinane do zera),
@@ -225,6 +251,10 @@ Czyste funkcje preludium (wszystkie poza `push`, `pop`) są dozwolone także w f
 | E3010 / E3011 / E3013 | pętla / rekursja / rekurencyjna `spec fn` bez `decreases` | |
 | E4043 | miara rekurencyjnej `spec fn` może nie maleć | argument wywołania musi być podstrukturą |
 | E3014 | lemat z wynikiem lub `inout` | |
+| E2015 | typ funkcyjny w niedozwolonym miejscu (wynik, tablica, pole, `var`, `inout`, zagnieżdżony) | przekaż funkcję jako parametr |
+| E3015 | efekt w ciele domknięcia | przenieś do funkcji nazwanej |
+| E3016 | funkcja nie może być wartością (`requires`, `inout`, generyczna, częściowa, lemat, rekursja) | warunek do typu parametru albo opakuj w domknięcie |
+| E2141 | adnotacja domknięcia z uściśleniem innym niż oczekiwane | pomiń adnotację |
 | H7001 | dziura `?nazwa` | raport: typ, cel, hipotezy, kandydaci |
 
 Kontrprzykład **rzeczywisty** (odtworzony w interpreterze) = błąd w kodzie lub w specyfikacji.
@@ -264,4 +294,10 @@ znaleziony kontrprzykład (zminimalizowany) jest raportowany jako błąd rzeczyw
 - Wartość liczbową cyfr opisuj rekurencyjną `spec fn` z wynikiem `Nat` (np. `num(s, k)`)
   i lematem monotoniczności — wzór w `~/rdzen/examples/strings.rz` (`parse_nat`).
 - W wygenerowanym Pythonie: `rz_str("…")` zamienia napis Pythona na `Str`, `py_str(b)` odwrotnie.
+- Funkcje wyższego rzędu: wymagania wobec przekazywanej funkcji pisz w jej typie, np.
+  `f: fn(x: Int where self < 1000) -> Int where self > x`; funkcja `map`/`filter` z kontraktem
+  `ensures forall k in 0..xs.len: result[k] == f(xs[k])` daje wywołującemu pełną wiedzę.
+  Wzory: `~/rdzen/examples/hof.rz`.
+- Kontrprzykład z parametrem funkcyjnym podaje funkcję jako tabelę wartości w użytych punktach:
+  `f = {1 ↦ 1, …}` — typ parametru dopuszcza taką funkcję, więc kod lub typ jest za słaby.
 - Przy niepewności co do kodu wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.

@@ -242,7 +242,21 @@ class Parser:
     def type_(self):
         start = self.t.span
         if self.at("fn"):
-            raise err("E0003", self.t.span, "typy funkcyjne nie są obsługiwane w prototypie", ["3.1"])
+            self.adv()
+            self.expect("(")
+            ps = []
+            while not self.at(")"):
+                pname = None
+                if self.at("IDENT") and self.peek().kind == ":":
+                    pname = self.adv().text
+                    self.adv()
+                ps.append((pname, self.type_()))
+                if not self.accept(","):
+                    break
+            self.expect(")")
+            self.expect("->", "`->` w typie funkcyjnym")
+            ret = self.type_()
+            return TFn(ps, ret, sp(start, ret.span))
         name = self.expect("TIDENT", "typu").text
         args = []
         if self.accept("<"):
@@ -500,6 +514,22 @@ class Parser:
         if t.kind == "{":
             b = self.block()
             return BlockExpr(b, b.span)
+        if t.kind == "fn":
+            self.adv()
+            self.expect("(")
+            ps = []
+            while not self.at(")"):
+                pn = self.expect("IDENT", "nazwy parametru domknięcia").text
+                pt = self.type_() if self.accept(":") else None
+                ps.append((pn, pt))
+                if not self.accept(","):
+                    break
+            self.expect(")")
+            ret = self.type_() if self.accept("->") else None
+            self.expect("=>", "`=>` w domknięciu")
+            self.skip_semis()
+            body = self.expr()
+            return Lambda(ps, ret, body, sp(t.span, body.span))
         if t.kind == "if":
             return self.if_expr()
         if t.kind == "match":
