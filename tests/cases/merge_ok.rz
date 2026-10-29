@@ -1,0 +1,25 @@
+// expect: ok
+fn d(x: Int) -> Int
+    ensures result == x || (x <= 0 && result == 0)
+{
+    var y = 0
+    if x > 0 {
+        y = x
+    }
+    y
+}
+
+fn depth(t: Tree) -> Nat
+    decreases 0
+{
+    0
+}
+
+data Tree { Leaf, Node(left: Tree, value: Nat, right: Tree) }
+
+fn root_or(t: Tree, d: Nat) -> Nat {
+    match t {
+        Leaf => d,
+        Node(_, v, _) => v,
+    }
+}

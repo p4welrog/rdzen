@@ -1,0 +1,20 @@
+fn push_twice(inout a: Array<Int>, v: Int)
+    requires a.len < int_max - 1
+    ensures a.len == old(a).len + 2
+    ensures a[a.len - 1] == v && a[a.len - 2] == v
+{
+    push(&a, v)
+    push(&a, v)
+}
+
+fn build() -> Array<Int>
+    ensures result.len == 4
+    examples {
+        build() == [1, 1, 2, 2]
+    }
+{
+    var xs: Array<Int> = []
+    push_twice(&xs, 1)
+    push_twice(&xs, 2)
+    xs
+}

@@ -1,0 +1,38 @@
+data Pair { Pair(i: Nat, j: Nat) }
+
+spec fn sorted(xs: Array<Int>) -> Bool =
+    forall a in 0..xs.len: forall b in a..xs.len: xs[a] <= xs[b]
+
+fn two_sum(xs: Array<Int>, target: Int) -> Option<Pair>
+    requires sorted(xs)
+    requires forall k in 0..xs.len: -1000000 <= xs[k] && xs[k] <= 1000000
+    ensures match result {
+        Some(p) => p.i < p.j && p.j < xs.len && xs[p.i] + xs[p.j] == target,
+        None => true,
+    }
+    examples {
+        two_sum([1, 2, 4, 7], 9) == Some(Pair(1, 3))
+        two_sum([1, 2], 10) == None
+    }
+{
+    if xs.len < 2 {
+        return None
+    }
+    var lo = 0
+    var hi = xs.len - 1
+    while lo < hi
+        invariant 0 <= lo && lo <= hi && hi < xs.len
+        decreases hi - lo
+    {
+        let s = xs[lo] + xs[hi]
+        if s == target {
+            return Some(Pair(lo, hi))
+        }
+        if s < target {
+            lo = lo + 1
+        } else {
+            hi = hi - 1
+        }
+    }
+    None
+}

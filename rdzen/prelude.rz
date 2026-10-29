@@ -1,0 +1,9 @@
+// Preludium prototypu (podzbiór dodatku B).
+data Option<T> { None, Some(value: T) }
+data Result<T, E> { Ok(value: T), Err(error: E) }
+data Ordering { Less, Equal, Greater }
+
+type Nat = Int where self >= 0
+
+const int_max: Int = 0x7FFF_FFFF_FFFF_FFFF
+const int_min: Int = -int_max - 1

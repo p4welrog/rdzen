@@ -1,0 +1,19 @@
+// expect: E4020
+fn index_of(xs: Array<Int>, v: Int) -> Int
+    ensures result == -1 || (0 <= result && result < xs.len && xs[result] == v)
+{
+    var i = 0
+    var found = -1
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len
+        invariant found == -1
+        decreases xs.len - i
+    {
+        if xs[i] == v {
+            found = i + 1
+            break
+        }
+        i = i + 1
+    }
+    found
+}

@@ -1,0 +1,10 @@
+fn double(x: Int) -> Int
+    requires x >= 0 && x <= 1000
+    ensures result == 2 * x
+    examples {
+        double(3) == 7
+        double(-1) == -2
+    }
+{
+    x + x
+}

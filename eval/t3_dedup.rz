@@ -1,0 +1,29 @@
+spec fn strictly_inc(xs: Array<Int>) -> Bool =
+    forall k in 1..xs.len: xs[k - 1] < xs[k]
+
+spec fn sorted(xs: Array<Int>) -> Bool =
+    forall a in 0..xs.len: forall b in a..xs.len: xs[a] <= xs[b]
+
+fn dedup(xs: Array<Int>) -> Array<Int>
+    requires sorted(xs)
+    ensures strictly_inc(result)
+    ensures result.len <= xs.len
+    ensures forall k in 0..result.len: contains(xs, result[k])
+    examples {
+        dedup([1, 1, 2, 3, 3, 3]) == [1, 2, 3]
+        dedup([]) == []
+    }
+{
+    var out: Array<Int> = []
+    for x in xs
+        invariant strictly_inc(out)
+        invariant out.len <= it
+        invariant forall k in 0..out.len: contains(xs, out[k])
+        invariant out.len == 0 || (it > 0 && out[out.len - 1] == xs[it - 1])
+    {
+        if out.len == 0 || out[out.len - 1] < x {
+            push(&out, x)
+        }
+    }
+    out
+}

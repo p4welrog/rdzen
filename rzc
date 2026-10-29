@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT OR Apache-2.0
+"""rzc — kompilator prototypowy języka Rdzeń.
+
+Użycie:
+  rzc check PLIK.rz [--json] [--rlimit N]   weryfikacja, przykłady, diagnostyka
+  rzc emit PLIK.rz [-o WYJŚCIE.py]           generowanie modułu Pythona
+  rzc run PLIK.rz FUNKCJA [ARG ...]         uruchomienie funkcji w interpreterze
+"""
+import os
+import sys
+import json
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from rdzen.driver import compile_source          # noqa: E402
+from rdzen.diag import render_text, dumps_json   # noqa: E402
+
+
+def cmd_check(path, as_json, rlimit):
+    src = open(path, encoding="utf-8").read()
+    res = compile_source(src, rlimit=rlimit)
+    if as_json:
+        out = {"file": path, "diagnostics": json.loads(dumps_json(res.diags, path)), "summary": res.summary}
+        print(json.dumps(out, ensure_ascii=False, indent=2))
+    else:
+        lines = src.split("\n")
+        for d in res.diags:
+            print(render_text(d, path, lines))
+            print()
+        s = res.summary
+        if "obligations" in s:
+            o = s["obligations"]
+            total = sum(o.values())
+            print(f"zobowiązania: {total} (udowodnione {o['proved']}, nieznane {o['unknown']}, "
+                  f"obalone {o['refuted']}, indukcyjne-niejawne {o['refuted-inductive']}); "
+                  f"przykłady: {s['examples']['passed']} zaliczone, {s['examples']['failed']} niezaliczone; "
+                  f"dziury: {s['holes']}")
+    errors = [d for d in res.diags if d.severity == "error"]
+    return 1 if errors else 0
+
+
+def cmd_emit(path, out, rlimit):
+    from rdzen.emit_py import emit, Unsupported
+    src = open(path, encoding="utf-8").read()
+    res = compile_source(src, rlimit=rlimit)
+    errors = [d for d in res.diags if d.severity in ("error", "hole")]
+    if errors:
+        lines = src.split("\n")
+        for d in errors:
+            print(render_text(d, path, lines), file=sys.stderr)
+        print("emisja przerwana: program ma błędy lub dziury", file=sys.stderr)
+        return 1
+    try:
+        code = emit(res, os.path.basename(path))
+    except Unsupported as e:
+        print(f"emisja nieobsługiwana: {e}", file=sys.stderr)
+        return 1
+    if out:
+        open(out, "w", encoding="utf-8").write(code)
+        n = len(res.unproved)
+        print(f"zapisano {out}; sprawdzenia dynamiczne: {n} (zobowiązania bez dowodu)")
+    else:
+        print(code)
+    return 0
+
+
+def cmd_run(path, fn, args):
+    from rdzen.front import load
+    from rdzen.interp import Interp, Violation, fmt
+    from rdzen.parser import Parser
+    src = open(path, encoding="utf-8").read()
+    prog, ch, diags = load(src)
+    if prog is None or any(d.severity == "error" for d in diags):
+        lines = src.split("\n")
+        for d in diags:
+            print(render_text(d, path, lines))
+        return 1
+    sig = ch.fns.get(fn)
+    if sig is None or sig.builtin:
+        print(f"brak funkcji `{fn}`")
+        return 1
+    from rdzen.check import Ctx
+    vals = []
+    for a, (pn, pt, _) in zip(args, sig.params):
+        e = Parser(a).expr()
+        ch.infer(e, {}, Ctx(None), pt.bare())
+        vals.append(Interp(ch).ev(e, {}))
+    try:
+        v, outs = Interp(ch).call_fn(sig, vals, None)
+    except Violation as v:
+        print(f"pułapka: naruszenie `{v.kind}` w wierszu {v.span.line}" + (f" ({v.detail})" if v.detail else ""))
+        return 2
+    print(fmt(v))
+    for (pn, _, inout), o in zip([p for p in sig.params if p[2]], outs):
+        print(f"{pn} = {fmt(o)}")
+    return 0
+
+
+def main(argv):
+    if len(argv) < 3 or argv[1] not in ("check", "run", "emit"):
+        print(__doc__)
+        return 2
+    if argv[1] == "check":
+        rl = 4_000_000
+        if "--rlimit" in argv:
+            rl = int(argv[argv.index("--rlimit") + 1])
+        return cmd_check(argv[2], "--json" in argv, rl)
+    if argv[1] == "emit":
+        out = argv[argv.index("-o") + 1] if "-o" in argv else None
+        return cmd_emit(argv[2], out, 4_000_000)
+    return cmd_run(argv[2], argv[3], argv[4:])
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

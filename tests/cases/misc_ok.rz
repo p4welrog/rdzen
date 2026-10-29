@@ -1,0 +1,65 @@
+// expect: ok
+type Percent = Int where 0 <= self && self <= 100
+
+fn half(p: Percent) -> Percent
+    ensures result * 2 <= p
+{
+    p / 2
+}
+
+fn reset_neg(inout xs: Array<Int>)
+    ensures xs.len == old(xs).len
+    ensures forall k in 0..xs.len: xs[k] >= 0
+{
+    var i = 0
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len
+        invariant xs.len == old(xs).len
+        invariant forall k in 0..i: xs[k] >= 0
+        decreases xs.len - i
+    {
+        if xs[i] < 0 {
+            xs[i] = 0
+        }
+        i = i + 1
+    }
+}
+
+fn safe_sum(a: Int, b: Int) -> Int {
+    match checked_add(a, b) {
+        Some(s) => s,
+        None => 0,
+    }
+}
+
+fn drain(inout xs: Array<Int>) -> Int
+    ensures xs.len == 0
+{
+    var n = 0
+    while xs.len > 0
+        invariant n >= 0 && n <= old(xs).len - xs.len
+        decreases xs.len
+    {
+        match pop(&xs) {
+            Some(v) => { n = n + 1 },
+            None => { },
+        }
+    }
+    n
+}
+
+fn same(a: Array<Int>) -> Bool
+    ensures result
+{
+    let b = a
+    a == b
+}
+
+fn guarded(x: Int) -> Int
+    ensures result >= 0
+{
+    match x {
+        n if n < 0 => 0,
+        n => n,
+    }
+}

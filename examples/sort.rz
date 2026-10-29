@@ -1,0 +1,39 @@
+spec fn sorted_upto(xs: Array<Int>, n: Int) -> Bool =
+    forall i in 0..n: forall j in i..n: xs[i] <= xs[j]
+
+fn insertion_sort(inout xs: Array<Int>)
+    ensures xs.len == old(xs).len
+    ensures sorted_upto(xs, xs.len)
+    examples {
+        forall a: Array<Int>: sorted_upto(sorted_copy(a), a.len)
+    }
+{
+    var i = 1
+    while i < xs.len
+        invariant 1 <= i && (i <= xs.len || xs.len == 0)
+        invariant xs.len == old(xs).len
+        invariant sorted_upto(xs, min(i, xs.len))
+        decreases xs.len - i
+    {
+        let v = xs[i]
+        var j = i
+        while j > 0 && xs[j - 1] > v
+            invariant 0 <= j && j <= i
+            invariant xs.len == old(xs).len
+            invariant forall a in 0..i + 1: forall b in a..i + 1: a == j || b == j || xs[a] <= xs[b]
+            invariant forall b in j + 1..i + 1: v < xs[b]
+            decreases j
+        {
+            xs[j] = xs[j - 1]
+            j = j - 1
+        }
+        xs[j] = v
+        i = i + 1
+    }
+}
+
+fn sorted_copy(a: Array<Int>) -> Array<Int> {
+    var b = a
+    insertion_sort(&b)
+    b
+}

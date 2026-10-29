@@ -1,0 +1,6 @@
+// expect: E4060, E4120
+fn f(x: Nat) -> Int {
+    let y = x * 2
+    assert y > x
+    y
+}

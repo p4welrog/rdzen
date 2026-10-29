@@ -1,0 +1,5 @@
+// expect: E4050, E4120
+fn f(x: Int) -> Int {
+    let y: Nat = x - 1
+    y
+}

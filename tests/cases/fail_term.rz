@@ -1,0 +1,6 @@
+// expect: E4042
+fn bad(n: Nat) -> Nat
+    decreases n
+{
+    if n == 0 { 0 } else { bad(n) }
+}

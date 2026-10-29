@@ -1,0 +1,22 @@
+data DivError { DivByZero, Overflow }
+
+fn safe_div(a: Int, b: Int) -> Result<Int, DivError>
+    ensures match result {
+        Ok(q) => b != 0 && q == a / b,
+        Err(DivByZero) => b == 0,
+        Err(Overflow) => a == int_min && b == -1,
+    }
+    examples {
+        safe_div(7, 2) == Ok(3)
+        safe_div(-7, 2) == Ok(-3)
+        safe_div(1, 0) == Err(DivByZero)
+    }
+{
+    if b == 0 {
+        Err(DivByZero)
+    } else if a == int_min && b == -1 {
+        Err(Overflow)
+    } else {
+        Ok(a / b)
+    }
+}

@@ -1,0 +1,4 @@
+// expect: E4110
+fn get_last(xs: Array<Int>) -> Int {
+    xs[xs.len]
+}

@@ -1,0 +1,12 @@
+// expect: W4400
+fn sum_all(xs: Array<Nat>) -> Int
+    ensures result >= 0
+{
+    var s = 0
+    for x in xs
+        invariant s >= 0
+    {
+        s = s + x
+    }
+    s
+}

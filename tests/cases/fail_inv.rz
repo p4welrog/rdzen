@@ -1,0 +1,12 @@
+// expect: E4030, E4031
+fn f(n: Nat) -> Int {
+    var i = 0
+    while i < n
+        invariant i >= 1
+        invariant i <= 5
+        decreases n - i
+    {
+        i = i + 1
+    }
+    i
+}

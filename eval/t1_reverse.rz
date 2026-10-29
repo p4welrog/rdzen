@@ -1,0 +1,31 @@
+fn reverse(inout xs: Array<Int>)
+    ensures xs.len == old(xs).len
+    ensures forall k in 0..xs.len: xs[k] == old(xs)[xs.len - 1 - k]
+    examples {
+        reversed([1, 2, 3]) == [3, 2, 1]
+    }
+{
+    var i = 0
+    var j = xs.len - 1
+    while i < j
+        invariant 0 <= i && i <= xs.len
+        invariant j == xs.len - 1 - i
+        invariant xs.len == old(xs).len
+        invariant forall k in 0..i: xs[k] == old(xs)[xs.len - 1 - k]
+        invariant forall k in 0..i: xs[xs.len - 1 - k] == old(xs)[k]
+        invariant forall k in i..j + 1: xs[k] == old(xs)[k]
+        decreases j - i
+    {
+        let t = xs[i]
+        xs[i] = xs[j]
+        xs[j] = t
+        i = i + 1
+        j = j - 1
+    }
+}
+
+fn reversed(a: Array<Int>) -> Array<Int> {
+    var b = a
+    reverse(&b)
+    b
+}

@@ -1,0 +1,39 @@
+// expect: ok
+fn index_of(xs: Array<Int>, v: Int) -> Int
+    ensures (result == -1 && !contains(xs, v)) || (0 <= result && result < xs.len && xs[result] == v)
+    examples {
+        index_of([4, 5, 6], 6) == 2
+        index_of([4, 5, 6], 7) == -1
+    }
+{
+    var i = 0
+    var found = -1
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len
+        invariant found == -1
+        invariant forall k in 0..i: xs[k] != v
+        decreases xs.len - i
+    {
+        if xs[i] == v {
+            found = i
+            break
+        }
+        i = i + 1
+    }
+    found
+}
+
+fn count_pos(xs: Array<Int>) -> Nat
+    ensures result <= xs.len
+{
+    var c = 0
+    for x in xs
+        invariant 0 <= c && c <= it
+    {
+        if x <= 0 {
+            continue
+        }
+        c = c + 1
+    }
+    c
+}

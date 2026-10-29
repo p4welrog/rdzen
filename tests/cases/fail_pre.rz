@@ -1,0 +1,10 @@
+// expect: E4010
+fn need_pos(x: Int) -> Int
+    requires x > 0
+{
+    x
+}
+
+fn caller(y: Int) -> Int {
+    need_pos(y)
+}

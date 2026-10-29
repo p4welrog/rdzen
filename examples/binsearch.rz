@@ -1,0 +1,33 @@
+spec fn sorted(xs: Array<Int>) -> Bool =
+    forall i in 0..xs.len: forall j in i..xs.len: xs[i] <= xs[j]
+
+pub fn binary_search(xs: Array<Int>, target: Int) -> Option<Nat>
+    requires sorted(xs)
+    ensures match result {
+        Some(i) => i < xs.len && xs[i] == target,
+        None => forall k in 0..xs.len: xs[k] != target,
+    }
+    examples {
+        binary_search([1, 3, 5], 3) == Some(1)
+        binary_search([], 7) == None
+        forall xs: Array<Int>, t: Int:
+            !sorted(xs) || (binary_search(xs, t) != None) == contains(xs, t)
+    }
+{
+    var lo = 0
+    var hi = xs.len
+    while lo < hi
+        invariant 0 <= lo && lo <= hi && hi <= xs.len
+        invariant forall k in 0..lo: xs[k] < target
+        invariant forall k in hi..xs.len: xs[k] > target
+        decreases hi - lo
+    {
+        let mid = lo + (hi - lo) / 2
+        match compare(xs[mid], target) {
+            Less => { lo = mid + 1 },
+            Greater => { hi = mid },
+            Equal => { return Some(mid) },
+        }
+    }
+    None
+}

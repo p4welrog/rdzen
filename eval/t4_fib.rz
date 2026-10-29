@@ -1,0 +1,24 @@
+fn fib(n: Nat) -> Nat
+    requires n <= 90
+    examples {
+        fib(0) == 0
+        fib(1) == 1
+        fib(10) == 55
+        fib(90) == 2880067194370816120
+    }
+{
+    var a = 0
+    var b = 1
+    var i = 0
+    while i < n
+        invariant 0 <= i && i <= n
+        invariant 0 <= a && a <= b
+        decreases n - i
+    {
+        let c = a + b
+        a = b
+        b = c
+        i = i + 1
+    }
+    a
+}

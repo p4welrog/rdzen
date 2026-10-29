@@ -1,0 +1,38 @@
+// expect: E4020
+data Tree { Leaf, Node(left: Tree, value: Nat, right: Tree) }
+
+fn a(xs: Array<Int>) -> Int
+    ensures false
+{
+    0
+}
+
+fn b(o: Option<Nat>, xs: Array<Nat>) -> Int
+    ensures false
+{
+    match o { Some(v) => v, None => xs.len }
+}
+
+fn c(t: Tree) -> Int
+    ensures false
+{
+    var r = 0
+    var i = 0
+    while i < 10
+        invariant 0 <= i && i <= 10
+        decreases 10 - i
+    {
+        i = i + 1
+    }
+    r
+}
+
+fn d(x: Int) -> Int
+    ensures result == x
+{
+    var y = 0
+    if x > 0 {
+        y = x
+    }
+    y
+}
