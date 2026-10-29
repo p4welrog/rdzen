@@ -4,7 +4,7 @@ Mały język programowania z kontraktami weryfikowanymi statycznie (Z3), projekt
 generowanie kodu przez modele językowe: pełna specyfikacja mieści się w kontekście modelu,
 a kompilator zwraca strukturalną diagnostykę z kontrprzykładami.
 
-- `spec/` — formalna definicja języka (Typst + PDF, wersja 0.1)
+- `spec/` — formalna definicja języka (Typst + PDF, wersja 0.3)
 - `rzc`, `rdzen/` — prototyp kompilatora
 - `REFERENCE.md` — zwięzła referencja dla piszącego kod
 - `SKILL.md` — skill dla Claude: specyfikacja → weryfikacja → generowanie Pythona
@@ -37,14 +37,15 @@ referencji.
 Obsługiwane: `Int`, `Bool`, `Unit`, `Array<T>`, typy danych (także generyczne
 i rekurencyjne), aliasy z uściśleniami (`type Nat = Int where self >= 0`), stałe, `spec fn`
 (także rekurencyjne i wzajemnie rekurencyjne, z uściślonym wynikiem), `lemma fn`, miary
-strukturalne (`decreases t` dla typów danych),
+strukturalne (`decreases t` dla typów danych), niezmienniki typów danych (`data … where φ`),
+operator `?` dla `Option` i `Result`,
 funkcje z `requires`/`ensures`/`decreases`/`examples`, parametry `inout` z prawem wyłączności,
 `let`/`var`, przypisania, `while` z niezmiennikami i wariantem, `for`, `if`, `match`
 ze strażnikami, `break`/`continue`/`return`, `assert`, dziury `?h`, kwantyfikatory ograniczone,
 `old(…)`, wbudowane `push`, `pop`, `compare`, `min`, `max`, `contains`, `filled`, `checked_*`.
 
 Zobowiązania: `pre`, `post`, `inv-init`, `inv-pres`, `var-nn`, `var-dec`, `term`, `refine`,
-`assert`, `wd`, `bounds`, `overflow`, `div0`. Kontrprzykłady są odtwarzane w interpreterze
+`assert`, `wd`, `data-inv`, `bounds`, `overflow`, `div0`. Kontrprzykłady są odtwarzane w interpreterze
 i klasyfikowane jako rzeczywiste lub indukcyjne (§6.6). Zobowiązania nierozstrzygnięte przez
 solver są dodatkowo obalane testowaniem losowym.
 
@@ -54,9 +55,7 @@ rekurencyjnej `spec fn` jest dowodzone indukcyjnie (hipoteza dla wywołań o mni
 i dodawane jako aksjomat dla pozostałych zobowiązań.
 
 Nieobsługiwane (błąd `E0003`/`E2002`): napisy, `Byte`, `F64`, typy funkcyjne i domknięcia,
-operator `?`, kapabilności i efekty poza totalnością, aktorzy, `extern`, `import`,
-niezmienniki typów danych (`data … where`),
-sprawdzanie formy kanonicznej (`E0100`), generowanie kodu C (zamiast niego: Python).
+kapabilności i efekty poza totalnością, aktorzy, `extern`, `import`, sprawdzanie formy kanonicznej (`E0100`), generowanie kodu C (zamiast niego: Python).
 
 ## Różnice względem specyfikacji
 

@@ -16,7 +16,7 @@ from .pp import show
 from .diag import err
 
 EXPLICIT = {"pre", "post", "inv-init", "inv-pres", "var-nn", "var-dec", "term",
-            "refine", "assert", "wd"}
+            "refine", "assert", "wd", "data-inv"}
 
 
 # ---------------- stan symboliczny ----------------
@@ -187,6 +187,7 @@ class Verifier:
         self.axioms = []           # rank(x) >= 1
         self.spec_axioms = {}      # spec -> [∀ args. uściślenia parametrów ⇒ uściślenie wyniku]
         self.exclude = frozenset() # specyfikacje, których aksjomatów nie wolno użyć (dowód indukcyjny)
+        self.enc.inv_fn = self.inv_term
         self.tsub = {}             # podstawienie typów przy tłumaczeniu kontraktów funkcji generycznych
 
     def T(self, rt):
@@ -451,7 +452,28 @@ class Verifier:
             return R([(s, self.enc.arr_lit(e.ty, vs)) for s, vs in r.outs], r.brks, r.conts)
         if isinstance(e, CtorCall):
             r = self.ev_seq(e.args, st)
-            return R([(s, self.enc.mk_ctor(e.ty, e.name, vs)) for s, vs in r.outs], r.brks, r.conts)
+            out = R(brks=r.brks, conts=r.conts)
+            d = self.ch.data[e.ty.name]
+            sub = dict(zip(d.tparams, e.ty.args))
+            fields = dict(d.rctors)[e.name]
+            for s, vs in r.outs:
+                v = self.enc.mk_ctor(e.ty, e.name, vs)
+                conds, texts = [], []
+                for (fn_, ft), a, av in zip(fields, e.args, vs):
+                    ft2 = subst_rt(ft, sub)
+                    if ft2.refs:
+                        conds += self.enc.hyp(av, self.T(ft2), self.refine_fn({}), refs_only=True)
+                        texts += [show(x, {"self": show(a)}) for x in ft2.refs]
+                if d.where is not None:
+                    conds.append(self.inv_term(e.ty, v))
+                    texts.append(show(d.where, {"self": show(e)}))
+                if conds:
+                    s = self.ob("data-inv", s, z3.And(*conds), ("data-inv", e.span), e.span, " && ".join(texts),
+                                label=f"niezmiennik / uściślenia pól `{d.name}`: {' && '.join(texts)}")
+                out.outs.append((s, v))
+            return out
+        if isinstance(e, Try):
+            return self.ev(e.desugared, st)
         if isinstance(e, Call):
             return self.call(e, st)
         if isinstance(e, If):
@@ -542,6 +564,7 @@ class Verifier:
                 sa = rem.assume(cond, f"{show(e.expr)} is {_patstr(arm.pattern)}")
                 for k, bv in binds.items():
                     sa = sa.bind(k, bv)
+                sa = self.assume_pat_types(sa, arm.pattern, binds)
                 if arm.guard is not None:
                     gr = self.ev(arm.guard, sa)
                     out.brks += gr.brks
@@ -977,6 +1000,28 @@ class Verifier:
         self.axioms.append(z3.ForAll([y], f(y) >= 1, patterns=[f(y)]))
         return f
 
+    def inv_term(self, rt, v):
+        """Niezmiennik typu danych zastosowany do wartości v."""
+        d = self.ch.data[rt.name]
+        saved = self.tsub
+        self.tsub = {p: self.T(a) for p, a in zip(d.tparams, rt.args)}
+        try:
+            t, _ = self.tr(d.where, {}, Fx(self_=v))
+        finally:
+            self.tsub = saved
+        return t
+
+    def assume_pat_types(self, st, p, binds):
+        """Zmienne wiązane wzorcem to wartości swoich typów: dodaj hipotezy h(x, τ)."""
+        hyps = []
+        def go(q):
+            if q.kind == "var" and q.name in binds and q.ty is not None:
+                hyps.extend(self.enc.hyp(binds[q.name], self.T(q.ty), self.refine_fn({})))
+            for a in q.args:
+                go(a)
+        go(p)
+        return st.assume(z3.And(*hyps)) if hyps else st
+
     def recfun(self, sf, targs):
         key = (sf.name, tuple(sorted((k, v.bare().shape()) for k, v in targs.items())))
         if key in self.recfuns:
@@ -1067,7 +1112,7 @@ class Verifier:
                     cond, binds = self.pat(arm.pattern, v, self.T(e.expr.ty))
                     env2 = dict(env)
                     env2.update(binds)
-                    sa = rest.assume(cond)
+                    sa = self.assume_pat_types(rest.assume(cond), arm.pattern, binds)
                     if arm.guard is not None:
                         walk_(arm.guard, env2, sa)
                         g, _ = self.tr(arm.guard, env2, Fx())
@@ -1100,7 +1145,7 @@ class Verifier:
                 walk_(e.body, env2, st.assume(z3.And(lo <= k, k < hi)))
                 return
             for k_, v_ in vars(e).items():
-                if k_ in ("span", "ty", "callee", "targs"):
+                if k_ in NON_CHILD:
                     continue
                 for n in (v_ if isinstance(v_, list) else [v_]):
                     if isinstance(n, Arg):

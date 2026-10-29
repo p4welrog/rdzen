@@ -151,6 +151,9 @@ class Enc:
                     conds += self.hyp(self.field(rt, cname, j, v), ft2, refine_fn, depth + 1, refs_only)
                 if conds:
                     out.append(z3.Implies(self.is_ctor(rt, cname, v), z3.And(*conds)))
+            # niezmiennik typu danych (§6.3): hipoteza, nie zobowiązanie
+            if not refs_only and d.where is not None and getattr(self, "inv_fn", None):
+                out.append(self.inv_fn(rt, v))
         for r in rt.refs:
             out.append(refine_fn(r, v))
         return out

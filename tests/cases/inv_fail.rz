@@ -1,0 +1,17 @@
+// expect: E4051
+data Range { Range(lo: Int, hi: Int) } where self.lo <= self.hi
+data P { P(n: Nat) }
+data PosList { PNil, PCons(head: Int, tail: PosList) }
+    where match self { PNil => true, PCons(h, _) => h > 0 }
+
+fn bad_range(a: Int, b: Int) -> Range {
+    Range(a, b)
+}
+
+fn bad_field(x: Int) -> P {
+    P(x)
+}
+
+fn bad_cons(l: PosList) -> PosList {
+    PCons(0, l)
+}

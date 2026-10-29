@@ -16,7 +16,7 @@ from .check import RT, subst_rt
 from .pp import show
 
 CODE = {"pre": "E4010", "post": "E4020", "inv-init": "E4030", "inv-pres": "E4031",
-        "var-nn": "E4040", "var-dec": "E4041", "term": "E4042", "refine": "E4050",
+        "var-nn": "E4040", "var-dec": "E4041", "term": "E4042", "refine": "E4050", "data-inv": "E4051",
         "assert": "E4060", "wd": "E4070", "unreach": "E4080", "bounds": "E4110",
         "overflow": "E4120", "div0": "E4130"}
 
@@ -28,6 +28,7 @@ MSG = {"pre": "warunek wstępny wywołania może nie zachodzić",
        "var-dec": "wariant pętli może nie maleć",
        "term": "miara rekursji może nie maleć",
        "refine": "uściślenie typu może nie zachodzić",
+       "data-inv": "konstruowana wartość może nie spełniać niezmiennika typu lub uściśleń pól",
        "assert": "asercja może nie zachodzić",
        "wd": "formuła może być nieokreślona",
        "unreach": "koniec dopasowania może być osiągalny",
@@ -36,7 +37,7 @@ MSG = {"pre": "warunek wstępny wywołania może nie zachodzić",
        "div0": "możliwe dzielenie przez zero lub przepełnienie dzielenia"}
 
 SPEC = {"pre": ["6.4", "6.5"], "post": ["6.4", "6.6"], "inv-init": ["6.4"], "inv-pres": ["6.4", "6.6"],
-        "var-nn": ["6.4"], "var-dec": ["6.4"], "term": ["6.4"], "refine": ["4.4"], "assert": ["6.4"],
+        "var-nn": ["6.4"], "var-dec": ["6.4"], "term": ["6.4"], "refine": ["4.4"], "data-inv": ["4.4", "6.3"], "assert": ["6.4"],
         "wd": ["6.2"], "unreach": ["6.4"], "bounds": ["6.5", "7.3"], "overflow": ["6.5", "7.3"], "div0": ["6.5", "7.3"]}
 
 STATUS_ORDER = {"refuted": 3, "unknown": 2, "proved": 1}

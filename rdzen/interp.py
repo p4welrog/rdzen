@@ -262,10 +262,24 @@ class Interp:
             fields = dict(d.rctors)[v.name]
             for (fn, ft), fv in zip(fields, v.fields):
                 ft2 = subst_rt(ft, s)
-                if ft2.bare().shape() == rt.bare().shape():
-                    continue
-                if not self.check_type(fv, ft2, env, depth + 1):
+                same_ = ft2.bare().shape() == rt.bare().shape()
+                if not self.check_type(fv, ft2, env, depth if same_ else depth + 1):
                     return False
+            if d.where is not None and not self.formula(d.where, {}, d.where, None, selfv=v):
+                return False
+        return True
+
+    def ctor_ok(self, e, v):
+        """Zobowiązanie `data-inv` przy konstrukcji: uściślenia pól i niezmiennik typu."""
+        d = self.ch.data[e.ty.name]
+        s = dict(zip(d.tparams, e.ty.args))
+        fields = dict(d.rctors)[e.name]
+        for (fn, ft), fv in zip(fields, v.fields):
+            ft2 = subst_rt(ft, s)
+            if ft2.refs and not all(self.formula(r, {}, r, None, selfv=fv) for r in ft2.refs):
+                return False
+        if d.where is not None and not self.formula(d.where, {}, d.where, None, selfv=v):
+            return False
         return True
 
     def builtin_pure(self, n, args):
@@ -336,7 +350,12 @@ class Interp:
         if isinstance(e, ArrayLit):
             return [copy.deepcopy(self.ev(x, env)) for x in e.items]
         if isinstance(e, CtorCall):
-            return Ctor(e.name, [copy.deepcopy(self.ev(x, env)) for x in e.args])
+            v = Ctor(e.name, [copy.deepcopy(self.ev(x, env)) for x in e.args])
+            if not self.ctor_ok(e, v):
+                raise Violation("data-inv", ("data-inv", e.span), e.span, fmt(v))
+            return v
+        if isinstance(e, Try):
+            return self.ev(e.desugared, env)
         if isinstance(e, Call):
             return self.call(e, env)
         if isinstance(e, If):

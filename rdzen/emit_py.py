@@ -110,7 +110,7 @@ class Unsupported(Exception):
 
 def needs_stmts(e) -> bool:
     for n in walk(e):
-        if isinstance(n, (If, Match, BlockExpr, Hole)):
+        if isinstance(n, (If, Match, BlockExpr, Hole, Try)):
             return True
         if isinstance(n, Call) and any(a.inout for a in n.args):
             return True
@@ -386,9 +386,32 @@ class Emitter:
                 return f"len({a})"
             return f"{a}.{esc(e.name)}"
         if isinstance(e, ArrayLit):
-            return "[" + ", ".join(self.seq(e.items, bind=True)) + "]"
+            return "[" + ", ".join(self.seq(e.items)) + "]"
         if isinstance(e, CtorCall):
-            return f"{esc_ctor(e.name)}(" + ", ".join(self.seq(e.args, bind=True)) + ")"
+            args = self.seq(e.args)
+            if not self.need(("data-inv", e.span)):
+                return f"{esc_ctor(e.name)}(" + ", ".join(args) + ")"
+            d = self.ch.data[e.ty.name]
+            fields = dict(d.rctors)[e.name]
+            names = []
+            for a in args:
+                if _atomic(a):
+                    names.append(a)
+                else:
+                    t = self.fresh()
+                    self.w(f"{t} = {a}")
+                    names.append(t)
+            v = self.fresh("c")
+            self.w(f"{v} = {esc_ctor(e.name)}(" + ", ".join(names) + ")")
+            conds = []
+            for (fn_, ft), a in zip(fields, names):
+                conds += [self.f(r, {}, selfv=a) for r in ft.refs]
+            if d.where is not None:
+                conds.append(self.f(d.where, {}, selfv=v))
+            self.w(f"_check({' and '.join(conds) or 'True'}, 'data-inv', {self.loc(e.span)})")
+            return v
+        if isinstance(e, Try):
+            return self._val(e.desugared)
         if isinstance(e, Call):
             return self.call(e)
         if isinstance(e, (If, Match, BlockExpr)):
@@ -403,7 +426,7 @@ class Emitter:
             return "None"          # lematy są wymazywane (całkowite, bez efektów)
         if e.name in self.ch.specs:
             return f"_spec_{e.name}(" + ", ".join(self.seq([a.expr for a in e.args])) + ")"
-        vals = self.seq([a.expr for a in e.args if a.inout is None], bind=True)
+        vals = self.seq([a.expr for a in e.args if a.inout is None])
         if sig.builtin:
             if e.name == "push":
                 tgt = self.lookup(e.args[0].inout)[0]
@@ -528,13 +551,18 @@ class Emitter:
         if isinstance(e, BlockExpr):
             self.block(e.block, mode)
             return
-        self.sink(self.val(e, bind=(mode[0] != "discard")), mode)
+        if isinstance(e, Try):
+            self.valued(e.desugared, mode)
+            return
+        self.sink(self.val(e), mode)
 
     def valued_expr(self, e, mode):
+        if isinstance(e, Try):
+            e = e.desugared
         if isinstance(e, (If, Match, BlockExpr)):
             self.valued(e, mode)
         else:
-            self.sink(self.val(e, bind=(mode[0] != "discard")), mode)
+            self.sink(self.val(e), mode)
 
     def arm(self, arm, binds, mode):
         self.push_scope()
@@ -606,7 +634,7 @@ class Emitter:
                 if s.mutable and has_array(s.rt, self.ch.data):
                     v = f"_cp({v})"
             else:
-                v = self.val(s.expr, bind=True)
+                v = self.val(s.expr, bind=s.mutable)
             py = self.bind(s.name, s.mutable, s.rt)
             self.w(f"{py} = {v}")
             if s.type is not None:
@@ -629,7 +657,7 @@ class Emitter:
             return
         if isinstance(s, IndexAssign):
             py = self.lookup(s.name)[0]
-            i, v = self.seq([s.index, s.expr], bind=True)
+            i, v = self.seq([s.index, s.expr])
             if self.need(("bounds", s.span)):
                 self.w(f"_check(0 <= {i} < len({py}), 'bounds', {self.loc(s.span)})")
             el = s.target_rt.args[0]
@@ -721,7 +749,7 @@ class Emitter:
 
     def for_(self, s: For):
         arr = self.fresh("a")
-        self.w(f"{arr} = {self.val(s.iterable, bind=True)}")
+        self.w(f"{arr} = {self.val(s.iterable)}")
         self.push_scope()
         it = self.bind("it", False, None)
         if any(self.need(("inv-init", inv.span, s.span)) for inv in s.invariants):

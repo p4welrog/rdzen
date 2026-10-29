@@ -1,0 +1,152 @@
+// Niezmienniki typów danych i operator `?`.
+
+data Tree { Leaf, Node(left: Tree, key: Int, right: Tree) }
+
+spec fn mem(t: Tree, k: Int) -> Bool
+    decreases t
+=
+    match t { Leaf => false, Node(l, x, r) => x == k || mem(l, k) || mem(r, k) }
+
+spec fn all_lt(t: Tree, b: Int) -> Bool
+    decreases t
+=
+    match t { Leaf => true, Node(l, x, r) => x < b && all_lt(l, b) && all_lt(r, b) }
+
+spec fn all_gt(t: Tree, b: Int) -> Bool
+    decreases t
+=
+    match t { Leaf => true, Node(l, x, r) => x > b && all_gt(l, b) && all_gt(r, b) }
+
+spec fn is_bst(t: Tree) -> Bool
+    decreases t
+=
+    match t {
+        Leaf => true,
+        Node(l, x, r) => all_lt(l, x) && all_gt(r, x) && is_bst(l) && is_bst(r),
+    }
+
+// Drzewo poszukiwań: niezmiennik zamiast warunku wstępnego w każdej funkcji.
+data Bst { Bst(tree: Tree) } where is_bst(self.tree)
+
+lemma fn gt_not_mem(t: Tree, b: Int, k: Int)
+    requires all_gt(t, b) && k <= b
+    ensures !mem(t, k)
+    decreases t
+{
+    match t {
+        Leaf => { },
+        Node(l, _, r) => {
+            gt_not_mem(l, b, k)
+            gt_not_mem(r, b, k)
+        },
+    }
+}
+
+lemma fn lt_not_mem(t: Tree, b: Int, k: Int)
+    requires all_lt(t, b) && k >= b
+    ensures !mem(t, k)
+    decreases t
+{
+    match t {
+        Leaf => { },
+        Node(l, _, r) => {
+            lt_not_mem(l, b, k)
+            lt_not_mem(r, b, k)
+        },
+    }
+}
+
+fn search(t: Tree, k: Int) -> Bool
+    requires is_bst(t)
+    ensures result == mem(t, k)
+    decreases t
+{
+    match t {
+        Leaf => false,
+        Node(l, x, r) => {
+            if k == x {
+                true
+            } else if k < x {
+                gt_not_mem(r, x, k)
+                search(l, k)
+            } else {
+                lt_not_mem(l, x, k)
+                search(r, k)
+            }
+        },
+    }
+}
+
+fn find(b: Bst, k: Int) -> Bool
+    ensures result == mem(b.tree, k)
+{
+    search(b.tree, k)
+}
+
+fn singleton(k: Int) -> Bst
+    ensures mem(result.tree, k)
+{
+    Bst(Node(Leaf, k, Leaf))
+}
+
+// Lista o elementach dodatnich: niezmiennik obejmuje każdy węzeł.
+data PosList { PNil, PCons(head: Int, tail: PosList) }
+    where match self { PNil => true, PCons(h, _) => h > 0 }
+
+fn sum_pos(l: PosList) -> Int
+    ensures result >= 0
+    decreases l
+{
+    match l {
+        PNil => 0,
+        PCons(h, t) => match checked_add(h, sum_pos(t)) {
+            Some(s) => s,
+            None => int_max,
+        },
+    }
+}
+
+// Operator `?`.
+data ParseError { Empty, NotDigit(at: Nat) }
+
+fn digit(xs: Array<Int>, i: Nat) -> Result<Int, ParseError>
+    ensures match result { Ok(d) => 0 <= d && d <= 9, Err(_) => true }
+{
+    if i >= xs.len {
+        Err(Empty)
+    } else if 48 <= xs[i] && xs[i] <= 57 {
+        Ok(xs[i] - 48)
+    } else {
+        Err(NotDigit(i))
+    }
+}
+
+fn two_digits(xs: Array<Int>) -> Result<Int, ParseError>
+    ensures match result { Ok(n) => 0 <= n && n <= 99, Err(_) => true }
+    examples {
+        two_digits([52, 50]) == Ok(42)
+        two_digits([52, 120]) == Err(NotDigit(1))
+        two_digits([]) == Err(Empty)
+    }
+{
+    let a = digit(xs, 0)?
+    let b = digit(xs, 1)?
+    Ok(10 * a + b)
+}
+
+fn first_two(xs: Array<Int>) -> Option<Int>
+    ensures match result { Some(s) => xs.len >= 2, None => xs.len < 2 }
+{
+    let a = at(xs, 0)?
+    let b = at(xs, 1)?
+    match checked_add(a, b) {
+        Some(s) => Some(s),
+        None => Some(0),
+    }
+}
+
+fn at(xs: Array<Int>, i: Nat) -> Option<Int>
+    ensures match result { Some(v) => i < xs.len && v == xs[i], None => i >= xs.len }
+{
+    if i < xs.len { Some(xs[i]) } else { None }
+}

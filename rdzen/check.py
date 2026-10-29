@@ -272,6 +272,14 @@ class Checker:
             if sf.recursive and sf.decreases is None:
                 self.error(err("E3013", sf.span, f"rekurencyjna funkcja specyfikacyjna `{n}` wymaga miary `decreases`", ["6.1"],
                                notes=["np. `decreases t` dla parametru typu danych albo `decreases n` dla `Nat`"]))
+        for d in self.data.values():
+            if d.where is not None:
+                try:
+                    st = RT("Data", d.name, [V(p) for p in d.tparams])
+                    t = self.infer(d.where, {}, Ctx(None, formula=True, allow_self=st), BOOL)
+                    self.expect_ty(d.where, t, BOOL)
+                except CompileError as e:
+                    self.error(e)
         for it in self.items:
             if isinstance(it, SpecFn):
                 try:
@@ -367,7 +375,12 @@ class Checker:
             want = self.resolve(s.type, ctx.fn.tparams if ctx.fn else []) if s.type else None
             if want is not None:
                 self.check_refs(want, {**env, s.name: VarInfo(want, "let")}, ctx.fn)
-            t = self.infer(s.expr, env, ctx, want)
+            try:
+                t = self.infer(s.expr, env, ctx, want)
+            except CompileError:
+                # brak kaskady (§9.3): zmienna z błędnym inicjalizatorem jest „skażona”
+                env[s.name] = VarInfo(want or NEVER, "var" if s.mutable else "let")
+                raise
             if t.kind == "Never":
                 return NEVER
             if t.kind == "Unit" and want is None and not isinstance(s.expr, (UnitLit,)):
@@ -486,6 +499,8 @@ class Checker:
             if e.name not in env:
                 raise err("E1010", e.span, f"nieznana zmienna `{e.name}`", ["6.1"])
             return env[e.name].rt.bare()
+        if isinstance(e, Try):
+            return self.try_(e, env, ctx, expected)
         if isinstance(e, Hole):
             if ctx.formula:
                 raise err("E7001", e.span, "dziura nie może wystąpić w formule", ["9.5"])
@@ -562,6 +577,33 @@ class Checker:
                 raise err("E6104", e.span, "bloki nie są dozwolone w formułach", ["6.1"])
             return self.block(e.block, env, ctx, expected)
         raise err("E0099", e.span, f"nieobsługiwane wyrażenie {type(e).__name__}", [])
+
+    def try_(self, e, env, ctx, expected):
+        """`e?` (§4.2): elaboracja do `match` z wczesnym powrotem."""
+        if ctx.formula or ctx.fn is None:
+            raise err("E2140", e.span, "operator `?` jest dozwolony tylko w ciele funkcji", ["4.2"])
+        t = self.infer(e.expr, env, ctx, None)
+        ret = ctx.fn.ret
+        sp_ = e.span
+        self.try_count = getattr(self, "try_count", 0) + 1
+        v = f"_try{self.try_count}"
+        if t.kind == "Data" and t.name == "Option" and ret.kind == "Data" and ret.name == "Option":
+            arms = [Arm(Pattern("ctor", name="Some", args=[Pattern("var", name=v, span=sp_)], span=sp_), None, Name(v, sp_), sp_),
+                    Arm(Pattern("ctor", name="None", span=sp_), None,
+                        BlockExpr(Block([Return(CtorCall("None", [], sp_), sp_)], sp_), sp_), sp_)]
+        elif (t.kind == "Data" and t.name == "Result" and ret.kind == "Data" and ret.name == "Result"
+              and same(t.args[1], ret.args[1])):
+            w = v + "e"
+            arms = [Arm(Pattern("ctor", name="Ok", args=[Pattern("var", name=v, span=sp_)], span=sp_), None, Name(v, sp_), sp_),
+                    Arm(Pattern("ctor", name="Err", args=[Pattern("var", name=w, span=sp_)], span=sp_), None,
+                        BlockExpr(Block([Return(CtorCall("Err", [Name(w, sp_)], sp_), sp_)], sp_), sp_), sp_)]
+        else:
+            raise err("E2140", e.span, "operator `?` wymaga `Option` w funkcji zwracającej `Option` "
+                      "albo `Result<_, E>` w funkcji zwracającej `Result<_, E>` (ten sam typ błędu)", ["4.2"],
+                      expected=str(ret), found=str(t))
+        m = Match(e.expr, arms, sp_)
+        e.desugared = m
+        return self.infer(m, env, ctx, expected)
 
     def block_or_formula(self, b, env, ctx, expected):
         if ctx.formula:

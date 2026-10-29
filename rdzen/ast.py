@@ -347,9 +347,22 @@ class SelfRef(Node):
 
 
 @dataclass(eq=False)
+class Try(Node):
+    """Operator `?` — elaborowany przez kontroler typów do `match` (pole `desugared`)."""
+    expr: Node
+    span: Span = NOSPAN
+    desugared: Optional[Node] = None
+
+
+@dataclass(eq=False)
 class Hole(Node):
     name: str
     span: Span = NOSPAN
+
+
+# atrybuty dodawane przez kolejne fazy (typy, rozwiązane deklaracje), które nie są dziećmi w AST
+NON_CHILD = {"span", "ty", "callee", "targs", "data", "sig", "env", "fn", "desugared",
+             "rt", "target_rt", "rret", "rparams", "rctors"}
 
 
 def walk(node):
@@ -365,7 +378,7 @@ def walk(node):
         return
     yield node
     for k, v in vars(node).items():
-        if k in ("span", "ty", "callee", "targs"):
+        if k in NON_CHILD:
             continue
         if isinstance(v, (Node, list, tuple)):
             yield from walk(v)

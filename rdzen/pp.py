@@ -40,6 +40,8 @@ def _show(e, sub):
         return f"old({e.name})"
     if isinstance(e, Hole):
         return f"?{e.name}"
+    if isinstance(e, Try):
+        return show(e.expr, sub, 9) + "?"
     if isinstance(e, Unary):
         return e.op + show(e.expr, sub, 6)
     if isinstance(e, Binary):

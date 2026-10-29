@@ -195,8 +195,12 @@ class Parser:
             self.skip_semis()
         end = self.expect("}").span
         where = None
+        if self.at(";") and self.peek().kind == "where":
+            self.adv()
         if self.accept("where"):
-            raise err("E0003", self.toks[self.i - 1].span, "niezmienniki typów danych (`where`) nie są obsługiwane w prototypie", ["3.4"])
+            self.skip_semis()
+            where = self.expr()
+            end = where.span
         return DataDecl(name, tps, ctors, where, sp(start, end))
 
     def type_alias(self):
@@ -430,7 +434,8 @@ class Parser:
                 nm = self.expect("IDENT", "nazwy pola")
                 e = Field(e, nm.text, sp(e.span, nm.span))
             elif self.at("?"):
-                raise err("E0003", self.t.span, "operator `?` nie jest obsługiwany w prototypie", ["4.2"])
+                q = self.adv()
+                e = Try(e, sp(e.span, q.span))
             else:
                 return e
 

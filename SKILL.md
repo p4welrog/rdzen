@@ -80,14 +80,15 @@ wykonania. Wynik to moduł Pythona (`rzc emit`).
 | `Bool`, `Unit` | `Unit` to typ funkcji bez `->` |
 | `Array<T>` | wartość (kopiowana), `xs.len`, `xs[i]` |
 | `data T<A> { C1, C2(f: Int, g: A) }` | typy algebraiczne, mogą być rekurencyjne |
+| `data T { … } where φ` | niezmiennik typu (`self` = wartość); sprawdzany przy każdej konstrukcji, zakładany dla każdej wartości typu |
 | `T where φ` | typ uściślony, `self` oznacza wartość, np. `Int where self >= 0` |
 | `type N = …` | alias, np. `type Percent = Int where 0 <= self && self <= 100` |
 
 Preludium: `Option<T> { None, Some(value: T) }`, `Result<T, E> { Ok(value: T), Err(error: E) }`,
 `Ordering { Less, Equal, Greater }`, `type Nat = Int where self >= 0`, stałe `int_min`, `int_max`.
 
-Brak w prototypie: napisów, `F64`, `Byte`, typów funkcyjnych i domknięć, operatora `?`,
-`extern`, `import`, aktorów, `data … where`.
+Brak w prototypie: napisów, `F64`, `Byte`, typów funkcyjnych i domknięć, `extern`, `import`,
+aktorów.
 
 ### 3. Deklaracje
 
@@ -166,6 +167,8 @@ match e {
     None => { y = 1; 0 },  // instrukcje tylko w bloku { … }
 }
 return e    break    continue    assert φ
+let v = e?                 // Option w funkcji zwracającej Option: None → return None
+                           // Result<_, E> w funkcji zwracającej Result<_, E>: Err(x) → return Err(x)
 ```
 
 Ostatnie wyrażenie bloku jest jego wartością. `match` musi być wyczerpujący (gałęzie ze
@@ -209,6 +212,8 @@ Każda formuła musi być **określona**: indeks w formule też musi być w zakr
 | W4200 | solver nie rozstrzygnął | uprość formułę; zostaje sprawdzenie dynamiczne |
 | E4300 / E4310 | przykład / test właściwości | kod albo przykład jest zły |
 | E5001 | niewyczerpujący `match` | dodaj brakujący przypadek |
+| E4051 `data-inv` | konstruowana wartość łamie niezmiennik typu lub uściślenie pola (np. `Nat`) | sprawdź warunek przed konstrukcją lub dodaj `requires` |
+| E2140 | `?` w funkcji o niezgodnym typie wyniku (inny typ błędu, `Option` vs `Result`) | dopasuj typ wyniku lub użyj `match` |
 | E3010 / E3011 / E3013 | pętla / rekursja / rekurencyjna `spec fn` bez `decreases` | |
 | E4043 | miara rekurencyjnej `spec fn` może nie maleć | argument wywołania musi być podstrukturą |
 | E3014 | lemat z wynikiem lub `inout` | |
@@ -239,5 +244,10 @@ znaleziony kontrprzykład (zminimalizowany) jest raportowany jako błąd rzeczyw
 - Rozwijanie definicji rekurencyjnych o jeden poziom solver robi sam: `size(Node(l, x, r))`
   jest znane jako `1 + size(l) + size(r)` bez lematu.
 - Uściślenie wyniku `spec fn` (np. `-> Nat`) daje fakty typu `size(t) >= 0` za darmo.
+- **Niezmiennik typu zamiast powtarzanych `requires`:** `data Bst { Bst(tree: Tree) } where
+  is_bst(self.tree)` — każda funkcja przyjmująca `Bst` dostaje `is_bst(b.tree)` jako fakt, a obowiązek
+  dowodu przechodzi na miejsca konstrukcji `Bst(…)`. Niezmiennik typu rekurencyjnego obowiązuje
+  w każdym węźle: zmienne związane wzorcem (np. `tail`) też go spełniają.
+- Konstrukcja sprawdza także uściślenia pól: `P(x)` dla `data P { P(n: Nat) }` wymaga `x >= 0`.
 - Środek przedziału: `lo + (hi - lo) / 2` (bez przepełnienia).
 - Przy niepewności co do kodu wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.

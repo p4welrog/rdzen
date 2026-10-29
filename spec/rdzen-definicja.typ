@@ -100,7 +100,7 @@
   #v(0.3em)
   #text(size: 14pt)[Formalna definicja języka programowania]
   #v(0.6em)
-  #text(size: 11pt)[Wersja 0.2 — szkic normatywny]
+  #text(size: 11pt)[Wersja 0.3 — szkic normatywny]
   #v(0.4em)
   #text(size: 10pt, style: "italic")[29 października 2026]
   #v(2.5cm)
@@ -547,7 +547,7 @@ $\{nu : tau | phi\}$, otrzymuje zobowiązanie. Pozycje te to:
   [przypisanie do `var m: τ where φ`], [$m := e' ; "assert"[kappa_"ref"] phi[!m slash nu]$ — niezmiennik zmiennej],
   [argument dla parametru uściślonego], [włączany do warunku wstępnego wywoływanej funkcji (§6.4)],
   [wynik funkcji o typie uściślonym], [włączany do warunku końcowego funkcji],
-  [konstrukcja wartości typu z `where φ_T`], [$"let" y = C(overline(v)) "in" ("assert"[kappa_"inv"] phi_T [y slash "self"] ; y)$],
+  [konstrukcja $C(overline(v))$ typu $T$ (z `where φ_T` lub o polach uściślonych $f_i : \{nu : tau_i | psi_i\}$)], [$"let" y = C(overline(v)) "in" ("assert"[kappa_"inv"] (and.big_i psi_i [v_i slash nu]) and phi_T [y slash "self"] ; y)$ — jedno zobowiązanie `data-inv`],
   [zapis elementu `Array⟨τ where φ⟩`], [zobowiązanie $phi$ dla zapisywanej wartości],
 )
 
@@ -1042,7 +1042,10 @@ Dopasowanie definiuje się przez rozwinięcie do kaskady testów: $"match" e { p
 to $"let" v = e "in" "if" "test"(p_1, v) "then" ("let" overline(x) = "sel"(p_1, v) "in" "if" g_1 "then" e_1 "else" M_rho) "else" M_rho$,
 gdzie $M_rho$ jest rozwinięciem reszty gałęzi, a pusta reszta to $"trap"("unreachable")$
 (zobowiązanie rodzaju `unreach`, zawsze dowodliwe dla dopasowań wyczerpujących). Funkcje
-$"test"$ i $"sel"$ wyrażają się testerami i selektorami teorii ADT.
+$"test"$ i $"sel"$ wyrażają się testerami i selektorami teorii ADT. Zmienne $overline(x)$ wiązane
+wzorcem są wartościami typów swoich pól, więc do kontekstu dodaje się hipotezy $h(x_i, tau_i)$
+(§6.3) — w szczególności niezmiennik typu dla pól typu rekurencyjnego, którego nie obejmuje
+ograniczona głębokość hipotezy wartości dopasowywanej.
 
 === Pętle
 
@@ -1137,7 +1140,7 @@ dopasowanej do parametru. Spadek rangi jest dobrze ufundowany, bo wartości są 
   [`var-dec`], [spadek wariantu], [tak], [E4041],
   [`term`], [spadek miary w wywołaniu rekurencyjnym (funkcja / funkcja specyfikacyjna)], [tak], [E4042 / E4043],
   [`refine`], [uściślenie przy wiązaniu lub przypisaniu], [tak], [E4050],
-  [`data-inv`], [niezmiennik typu danych przy konstrukcji], [tak], [E4051],
+  [`data-inv`], [niezmiennik typu danych i uściślenia pól przy konstrukcji], [tak], [E4051],
   [`assert`], [instrukcja `assert`], [tak], [E4060],
   [`wd`], [dobra określoność formuły], [tak], [E4070],
   [`unreach`], [osiągalność końca dopasowania], [tak], [E4080],

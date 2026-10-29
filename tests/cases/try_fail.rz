@@ -1,0 +1,17 @@
+// expect: E2140
+data E1 { E1 }
+data E2 { E2 }
+
+fn a() -> Result<Int, E1> {
+    Ok(1)
+}
+
+fn wrong_err() -> Result<Int, E2> {
+    let x = a()?
+    Ok(x)
+}
+
+fn wrong_kind(o: Option<Int>) -> Result<Int, E1> {
+    let x = o?
+    Ok(x)
+}

@@ -1,0 +1,48 @@
+// expect: ok
+data PosList { PNil, PCons(head: Int, tail: PosList) }
+    where match self { PNil => true, PCons(h, _) => h > 0 }
+
+data Range { Range(lo: Int, hi: Int) } where self.lo <= self.hi
+
+data Opt2 { Opt2(v: Option<Nat>) }
+
+fn second_pos(l: PosList) -> Int
+    ensures result > 0
+{
+    match l {
+        PNil => 1,
+        PCons(h, t) => match t {
+            PNil => h,
+            PCons(h2, _) => h2,
+        },
+    }
+}
+
+fn width(r: Range) -> Nat
+    requires r.hi - r.lo <= 1000000 && r.lo >= -1000000
+{
+    r.hi - r.lo
+}
+
+fn make(a: Int, b: Int) -> Range
+    examples {
+        make(3, 1) == Range(1, 3)
+    }
+{
+    if a <= b { Range(a, b) } else { Range(b, a) }
+}
+
+fn unwrap_or_zero(o: Opt2) -> Nat {
+    match o {
+        Opt2(Some(n)) => n,
+        Opt2(None) => 0,
+    }
+}
+
+fn chain(a: Option<Int>, b: Option<Int>) -> Option<Int>
+    ensures match result { Some(_) => a != None && b != None, None => a == None || b == None }
+{
+    let x = a?
+    let y = b?
+    Some(min(x, y))
+}
