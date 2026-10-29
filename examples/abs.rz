@@ -1,3 +1,7 @@
+// Przykład diagnostyki (specyfikacja §9): kod celowo błędny.
+// Oczekiwane: E4120 — `-x` przepełnia się dla x = int_min (kontrprzykład rzeczywisty).
+// Poprawka: `requires x > int_min`.
+
 fn abs(x: Int) -> Int
     ensures result >= 0
 {

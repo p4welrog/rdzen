@@ -1,3 +1,6 @@
+// Przykład diagnostyki (specyfikacja §9): program z dziurą.
+// Oczekiwane: H7001 — raport dziury `?rest` (typ, cel, hipotezy, kandydaci).
+
 fn clamp(x: Int, lo: Int, hi: Int) -> Int
     requires lo <= hi
     ensures lo <= result && result <= hi
