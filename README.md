@@ -9,6 +9,7 @@ a kompilator zwraca strukturalną diagnostykę z kontrprzykładami.
 - `lean/` — mechanizacja metateorii fragmentu jądra w Lean 4 (tw. 8.5–8.7)
 - `REFERENCE.md` — zwięzła referencja dla piszącego kod
 - `SKILL.md` — skill dla Claude: specyfikacja → weryfikacja → generowanie Pythona
+- `docs/stan-projektu.md` — architektura, decyzje, wyniki i otwarte zadania (aktualizowany z każdym zadaniem)
 
 ## rzc — prototyp kompilatora
 
@@ -115,7 +116,7 @@ i przekształcenia R (tw. 8.6), terminacja pętli (tw. 8.7), konieczność prawa
 | Część | Licencja |
 |---|---|
 | Kompilator i testy (`rzc`, `rdzen/`, `tests/`) | `MIT OR Apache-2.0` — do wyboru ([LICENSE-MIT](LICENSE-MIT), [LICENSE-APACHE](LICENSE-APACHE)) |
-| Specyfikacja i dokumentacja (`spec/`, `REFERENCE.md`, `README.md`, `SKILL.md`) | [CC BY 4.0](LICENSE-CC-BY) |
+| Specyfikacja i dokumentacja (`spec/`, `docs/`, `REFERENCE.md`, `README.md`, `SKILL.md`) | [CC BY 4.0](LICENSE-CC-BY) |
 | Środowisko wykonawcze wklejane do modułów generowanych przez `rzc emit` i `rzc emit-c` | [0BSD](LICENSE-0BSD-RUNTIME) — wygenerowany kod nie wymaga noty licencyjnej |
 | Mechanizacja (`lean/`) | `MIT OR Apache-2.0` |
 | Przykłady (`examples/`, `eval/`, `tests/cases/`) | `MIT OR Apache-2.0` |
