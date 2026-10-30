@@ -69,7 +69,8 @@ Przekaż plik `.rz` i wygenerowany `.py` oraz krótki raport: liczba udowodniony
 lista pozostałych sprawdzeń dynamicznych (jeśli są), oraz co jest zaufane bez dowodu:
 kontrakty funkcji preludium, Z3, generator kodu Pythona lub C (nieweryfikowany, testowany
 różnicowo względem interpretera). Gwarancja dotyczy zgodności ze specyfikacją — specyfikację warto
-pokazać użytkownikowi do przejrzenia.
+pokazać użytkownikowi do przejrzenia. Nie przypisuj programowi własności, których kontrakty nie
+wyrażają (np. optymalności), nawet jeśli wynikają z lektury kodu.
 
 ## 4. Referencja języka
 
