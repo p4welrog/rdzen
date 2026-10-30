@@ -347,7 +347,7 @@ Wzorce ze studium `docs/studium-huffman.md`; pełny przykład: `~/rdzen/examples
 - **Asercje pośrednie dopisuj oszczędnie.** W studium Huffmana 45 z 46 asercji okazało się
   zbędnych — powstały jako reakcja na niedeterminizm kompilatora (już usunięty). Gdy zobowiązanie
   wychodzi `unknown` mimo udowodnionych przesłanek, najpierw zrzuć zapytanie (`RZ_DUMP_UNKNOWN`)
-  i sprawdź, czy wynik jest stały (`PYTHONHASHSEED=1` i `=2`); różny wynik to błąd kompilatora do
+  i sprawdź, czy wynik jest stały (`PYTHONHASHSEED=1` i `=2`, z `--no-cache`); różny wynik to błąd kompilatora do
   zgłoszenia, nie powód do zmiany specyfikacji. Pomaga podział funkcji, nie zwiększanie `--rlimit`.
 - **Nazwy z preludium są zajęte:** `contains`, `min`, `max`, `compare`, `filled`, `concat`, `slice`
   (`E1004`). Funkcji `spec` nie można przypisać do `let` (`E6105`) — pisz ją wprost w formułach.
