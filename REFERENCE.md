@@ -246,7 +246,7 @@ znaleziony kontrprzykład (zminimalizowany) jest raportowany jako błąd rzeczyw
   `f = {1 ↦ 1, …}` — typ parametru dopuszcza taką funkcję, więc kod lub typ jest za słaby.
 - Przy niepewności co do kodu wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.
 
-### 10. Większe dowody (struktury danych, wiele pętli)
+## 10. Większe dowody (struktury danych, wiele pętli)
 
 Wzorce ze studium `docs/studium-huffman.md`; pełny przykład: `~/rdzen/examples/huffman.rz`.
 
