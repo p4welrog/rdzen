@@ -46,8 +46,10 @@ prototyp ich nie obsługuje; wtedy napisz zwykły kod.
    `obligation.formula`, `counterexample` (`class`: `real` = błąd w kodzie lub specyfikacji;
    `inductive` = za słaby niezmiennik albo `ensures` wywoływanej funkcji) i `notes`.
    Poprawiaj i powtarzaj; do ok. 8 iteracji na funkcję, potem opisz użytkownikowi, co nie
-   przechodzi. Sprawdzaj funkcje przyrostowo (dopisuj i weryfikuj po jednej), bo pełne `check`
-   dużego pliku trwa dziesiątki sekund.
+   przechodzi. Sprawdzaj funkcje przyrostowo: `rzc check plik.rz --fn nazwa` weryfikuje tylko
+   wskazaną funkcję (kontrakty pozostałych są używane przy wywołaniach), a funkcje w pełni
+   udowodnione i niezmienione są brane z pamięci wyników. Na koniec uruchom pełne `check`
+   bez `--fn` — wynik końcowy musi pochodzić z pełnego przebiegu.
 5. **Nie osłabiaj `ensures` ani nie usuwaj przykładów, żeby przejść weryfikację**, chyba że
    specyfikacja była błędna — wtedy powiedz to użytkownikowi wprost.
 6. **Ostrzeżenia `W4200`/`W4400`** oznaczają sprawdzenie dynamiczne w kodzie wynikowym.

@@ -9,6 +9,12 @@ Użycie:
   rzc emit-c PLIK.rz [-o WYJŚCIE.c]          generowanie jednostki kompilacji C (GCC/Clang)
   rzc fmt PLIK.rz [-w | --check]            postać kanoniczna (wypisanie, zapis w miejscu, sprawdzenie)
 
+Opcje check:
+  --fn NAZWA[,NAZWA…]   sprawdza tylko wskazane funkcje (pozostałe są typowane; ich kontrakty
+                        są używane przy wywołaniach)
+  --no-cache            bez pamięci wyników (domyślnie: ~/.cache/rzc lub $RZ_CACHE); z pamięci
+                        brane są tylko funkcje w pełni udowodnione przy niezmienionym tekście,
+                        kontraktach i wersji kompilatora
 Opcja --no-canon wyłącza błąd E0100 (program w postaci niekanonicznej).
 """
 import os
@@ -51,9 +57,9 @@ def cmd_fmt(paths, write, check):
     return rc
 
 
-def cmd_check(path, as_json, rlimit, canon=True):
+def cmd_check(path, as_json, rlimit, canon=True, only=None, cache=True):
     src = open(path, encoding="utf-8").read()
-    res = compile_source(src, rlimit=rlimit, canon=canon)
+    res = compile_source(src, rlimit=rlimit, canon=canon, only=only, cache=cache)
     if as_json:
         out = {"file": path, "diagnostics": json.loads(dumps_json(res.diags, path)), "summary": res.summary}
         print(json.dumps(out, ensure_ascii=False, indent=2))
@@ -70,6 +76,14 @@ def cmd_check(path, as_json, rlimit, canon=True):
                   f"obalone {o['refuted']}, indukcyjne-niejawne {o['refuted-inductive']}); "
                   f"przykłady: {s['examples']['passed']} zaliczone, {s['examples']['failed']} niezaliczone; "
                   f"dziury: {s['holes']}")
+            u = s.get("units")
+            if u and (u["from_cache"] or u["checked"] is not None):
+                parts = []
+                if u["checked"] is not None:
+                    parts.append("sprawdzane: " + ", ".join(u["checked"]))
+                if u["from_cache"]:
+                    parts.append(f"z pamięci (bez zmian, udowodnione): {len(u['from_cache'])}")
+                print("; ".join(parts))
     errors = [d for d in res.diags if d.severity == "error"]
     return 1 if errors else 0
 
@@ -145,7 +159,8 @@ def main(argv):
         rl = 1_000_000
         if "--rlimit" in argv:
             rl = int(argv[argv.index("--rlimit") + 1])
-        return cmd_check(argv[2], "--json" in argv, rl, canon)
+        only = argv[argv.index("--fn") + 1].split(",") if "--fn" in argv else None
+        return cmd_check(argv[2], "--json" in argv, rl, canon, only, "--no-cache" not in argv)
     if argv[1] in ("emit", "emit-c"):
         out = argv[argv.index("-o") + 1] if "-o" in argv else None
         return cmd_emit(argv[2], out, 1_000_000, canon, "c" if argv[1] == "emit-c" else "py")

@@ -21,11 +21,15 @@ Wymagania: Python ≥ 3.10, `pip install z3-solver`.
 ```
 ./rzc check plik.rz            # weryfikacja, przykłady, diagnostyka
 ./rzc check plik.rz --json     # diagnostyka strukturalna
+./rzc check plik.rz --fn f,g   # tylko wskazane funkcje (kontrakty pozostałych są używane)
+                               # wyniki w pełni udowodnionych funkcji są zapamiętywane
+                               # (~/.cache/rzc lub $RZ_CACHE; --no-cache wyłącza)
 ./rzc fmt plik.rz -w           # postać kanoniczna (check odrzuca inną błędem E0100)
 ./rzc emit plik.rz -o m.py     # moduł Pythona; sprawdzenia tylko dla zobowiązań bez dowodu
 ./rzc emit-c plik.rz -o m.c    # jednostka kompilacji C (GCC/Clang, gnu11)
 ./rzc run plik.rz f ARG...     # wykonanie funkcji w interpreterze (ze sprawdzeniami)
 python3 tests/run_tests.py     # testy regresyjne (tests/cases)
+python3 tests/cache_test.py    # pamięć wyników i --fn nie ukrywają błędów
 python3 tests/fmt_test.py      # formatter: zachowanie drzewa i komentarzy, idempotencja,
                                #   niezależność od odstępów
 python3 tests/diff_test.py     # testy różnicowe: wygenerowany Python vs interpreter

@@ -10,7 +10,7 @@ FILES = [os.path.join(ROOT, "examples", f) for f in ("bst.rz", "sort.rz", "hof.r
 
 def run(path, seed, dump):
     env = dict(os.environ, PYTHONHASHSEED=str(seed), RZ_DUMP_ALL=dump)
-    r = subprocess.run([sys.executable, os.path.join(ROOT, "rzc"), "check", path, "--json"],
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "rzc"), "check", path, "--json", "--no-cache"],
                        env=env, capture_output=True, text=True)
     return r.stdout
 

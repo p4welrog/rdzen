@@ -135,7 +135,9 @@ def _diff(a, b, limit=40):
     return "\n".join(d)
 
 
-def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True) -> Result:
+def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True, only=None, cache=False) -> Result:
+    """`only` — zbiór nazw funkcji (także lematów i `spec fn`) do sprawdzenia; pozostałe są tylko
+    typowane. `cache` — pamięć wyników weryfikacji między uruchomieniami (rdzen/cache.py)."""
     res = Result()
     prog, ch, diags = load(src)
     res.diags += diags
@@ -146,9 +148,20 @@ def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True) ->
     if prog is None or any(d.severity == "error" for d in diags):
         res.summary = {"stage": "front"}
         return res
+    if only is not None:
+        known = {f.name for f in ch.user_fns} | set(ch.specs)
+        missing = sorted(set(only) - known)
+        if missing:
+            res.diags.append(Diagnostic("E1013", "error", NOSPAN, f"brak funkcji: {', '.join(missing)}", ["5.2"]))
+            res.summary = {"stage": "front"}
+            return res
+    vc = None
+    if cache:
+        from .cache import VerifCache
+        vc = VerifCache(src, rlimit)
     ver = Verifier(ch, rlimit=rlimit)
     try:
-        obs = ver.run()
+        obs = ver.run(only=set(only) if only is not None else None, cache=vc)
     except CompileError as e:
         res.diags.append(e.diag)
         return res
@@ -160,7 +173,7 @@ def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True) ->
     groups = {}
     for o in obs:
         groups.setdefault((o.fn, o.key), []).append(o)
-    counts = {"proved": 0, "unknown": 0, "refuted": 0, "refuted-inductive": 0}
+    counts = {"proved": sum(ver.cached.values()), "unknown": 0, "refuted": 0, "refuted-inductive": 0}
     for (fn, key), lst in groups.items():
         worst = max(lst, key=lambda o: STATUS_ORDER[o.status])
         if worst.status != "proved":
@@ -206,6 +219,8 @@ def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True) ->
     ex_stats = {"passed": 0, "failed": 0}
     if run_examples:
         for f in ch.user_fns:
+            if only is not None and f.name not in only:
+                continue
             for ex in f.examples:
                 d = run_example(f, ex, ch, src)
                 if d is None:
@@ -215,6 +230,9 @@ def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True) ->
                         ex_stats["failed"] += 1
                     res.diags.append(d)
     res.summary = {"obligations": counts, "examples": ex_stats, "holes": len(ver.holes)}
+    if vc is not None or only is not None:
+        res.summary["units"] = {"checked": sorted(only) if only is not None else None,
+                                "from_cache": sorted(ver.cached)}
     res.diags.sort(key=lambda d: d.sort_key())
     return res
 

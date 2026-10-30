@@ -1467,20 +1467,43 @@ class Verifier:
         walk_(sf.body, env, st)
         self.exclude = frozenset()
 
-    def run(self):
+    def run(self, only=None, cache=None):
+        """Generuje i rozstrzyga zobowiązania. `only` — zbiór nazw funkcji (także `spec fn`)
+        do sprawdzenia, pozostałe są pomijane. `cache` — pamięć wyników (`VerifCache`): jednostka,
+        której wszystkie zobowiązania były udowodnione przy tym samym kluczu, nie jest
+        sprawdzana ponownie (`self.cached[nazwa]` = liczba udowodnionych grup zobowiązań)."""
+        self.cached = {}
+        units = []                     # (nazwa, klucz pamięci, początek w self.obs, liczba dziur)
+
+        def unit(name, node, verify):
+            if only is not None and name not in only:
+                return
+            key = cache.key(self, name, node) if cache is not None else None
+            if key is not None:
+                hit = cache.get(key)
+                if hit is not None:
+                    self.cached[name] = hit
+                    return
+            start, holes = len(self.obs), len(self.holes)
+            try:
+                verify(node)
+            except z3.Z3Exception as ex:
+                raise err("E4999", node.span, f"błąd wewnętrzny kodowania SMT: {ex}", [])
+            units.append((name, key, start, len(self.holes) - holes))
+
         for sf in self.ch.specs.values():
             if getattr(sf, "recursive", False) and sf.decreases is not None:
-                try:
-                    self.verify_spec(sf)
-                except z3.Z3Exception as ex:
-                    raise err("E4999", sf.span, f"błąd wewnętrzny kodowania SMT: {ex}", [])
+                unit(sf.name, sf, self.verify_spec)
         for f in self.ch.user_fns:
-            try:
-                self.verify_fn(f)
-            except z3.Z3Exception as ex:
-                raise err("E4999", f.span, f"błąd wewnętrzny kodowania SMT: {ex}", [])
+            unit(f.name, f, self.verify_fn)
         for o in self.obs:
             self.solve(o)
+        if cache is not None:
+            ends = [u[2] for u in units[1:]] + [len(self.obs)]
+            for (name, key, start, holes), end in zip(units, ends):
+                obs = self.obs[start:end]
+                if key is not None and holes == 0 and all(o.status == "proved" for o in obs):
+                    cache.put(key, len({o.key for o in obs}))
         return self.obs
 
     def solve(self, o: Ob):
@@ -1653,8 +1676,25 @@ class Verifier:
         return s.check() == z3.unsat
 
 
+_SYM_CACHE = {}       # id wyrażenia -> (wyrażenie, nazwy); wyrażenie trzymane, by id nie zostało użyte ponownie
+
+
 def used_symbols(exprs):
-    """Nazwy stałych i funkcji nieinterpretowanych (także rekurencyjnych) w wyrażeniach."""
+    """Nazwy stałych i funkcji nieinterpretowanych (także rekurencyjnych) w wyrażeniach.
+    Warunki ścieżki są współdzielone przez wiele zobowiązań — wynik dla każdego wyrażenia
+    najwyższego poziomu jest zapamiętywany."""
+    names = set()
+    for e in exprs:
+        k = e.get_id()
+        hit = _SYM_CACHE.get(k)
+        if hit is None or not hit[0].eq(e):
+            hit = (e, frozenset(_used_symbols1([e])))
+            _SYM_CACHE[k] = hit
+        names |= hit[1]
+    return names
+
+
+def _used_symbols1(exprs):
     seen, names, stack = set(), set(), list(exprs)
     while stack:
         e = stack.pop()
