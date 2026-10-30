@@ -341,9 +341,11 @@ Wzorce ze studium `docs/studium-huffman.md`; pełny przykład: `~/rdzen/examples
 - **Tablica zapisywana w pętli nie może być argumentem funkcji rekurencyjnej w niezmienniku,
   jeśli da się tego uniknąć.** Fakty o zawartości wyrażaj przez indeksy (`bits[p + q] == c[q]`),
   a funkcję rekurencyjną stosuj do tablicy niezmienianej (np. `c`) i przenoś lematem przesunięcia.
-- **Asercje pośrednie** w gałęziach (`assert mem(f[lo], s)` przed `own[s] = lo`) skracają
-  zobowiązania. Jeśli wynik weryfikacji zmienia się między uruchomieniami, to sygnał, że
-  zobowiązanie jest na granicy limitu — dziel funkcję albo dodaj asercje, nie zwiększaj `--rlimit`.
+- **Asercje pośrednie dopisuj oszczędnie.** W studium Huffmana 45 z 46 asercji okazało się
+  zbędnych — powstały jako reakcja na niedeterminizm kompilatora (już usunięty). Gdy zobowiązanie
+  wychodzi `unknown` mimo udowodnionych przesłanek, najpierw zrzuć zapytanie (`RZ_DUMP_UNKNOWN`)
+  i sprawdź, czy wynik jest stały (`PYTHONHASHSEED=1` i `=2`); różny wynik to błąd kompilatora do
+  zgłoszenia, nie powód do zmiany specyfikacji. Pomaga podział funkcji, nie zwiększanie `--rlimit`.
 - **Nazwy z preludium są zajęte:** `contains`, `min`, `max`, `compare`, `filled`, `concat`, `slice`
   (`E1004`). Funkcji `spec` nie można przypisać do `let` (`E6105`) — pisz ją wprost w formułach.
 - **Spójniki pod kwantyfikatorem:** `forall i in 0..n: A && B` obejmuje `A && B`; kolejny
