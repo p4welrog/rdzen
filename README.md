@@ -81,10 +81,13 @@ zapisu literałów i pustych wierszy między instrukcjami; `rzc check` zgłasza 
 z poprawką. Opcja `--no-canon` wyłącza to sprawdzenie.
 
 Backend C: `Int` → `int64_t`, tablice z semantyką wartości (kopie w tych samych miejscach co
-w backendzie Pythona), typy danych jako niemutowalne struktury z etykietą, monomorfizacja
+w backendzie Pythona), typy danych jako niemutowalne struktury z etykietą (nierekurencyjne —
+przez wartość, bez sterty; rekurencyjne — wskaźnik), monomorfizacja
 generyczności, domknięcia jako pary {środowisko, funkcja}, monitory kontraktów wyższego rzędu,
-formuły w sprawdzeniach dynamicznych liczone w 128 bitach, pułapki przez `longjmp`. Pamięć nie
-jest zwalniana (prototyp).
+formuły w sprawdzeniach dynamicznych liczone w 128 bitach, pułapki przez `longjmp`. Plik
+wynikowy zawiera tylko używane funkcje pomocnicze; kopie i parametry czytane wyłącznie przez
+dowód nie są emitowane, a kod kompiluje się bez ostrzeżeń `-Wall -Wextra`
+(`tests/c_warnings_test.py`). Pamięć nie jest zwalniana (prototyp).
 
 Mechanizacja (`lean/`): fragment sekwencyjny z `break`/`continue`/`return`, pętlami
 z niezmiennikami i wariantami, zobowiązaniami w trybach udowodnione/sprawdzane/usunięte

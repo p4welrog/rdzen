@@ -19,6 +19,7 @@ Zasady tłumaczenia (zgodne z backendem Pythona, `emit_py.py`):
 """
 from __future__ import annotations
 import json
+import re
 from contextlib import contextmanager
 from .ast import *
 from .ghost import runtime_names, erasable_let
@@ -163,6 +164,7 @@ class CEmitter:
         self.ind = 0
         self.fn = None
         self.rt_names = None
+        self.used_labels = set()
         self.scopes = []
         self.loops = []
         self.olds = {}
@@ -274,12 +276,25 @@ class CEmitter:
     def zero(self, rt):
         return "{0}"
 
+    def unboxed(self, rt) -> bool:
+        """Typ danych bez pól własnego typu (nierekurencyjny) jest w C strukturą przekazywaną przez
+        wartość — bez alokacji na stercie. Wartości typów danych są niemutowalne, więc kopia
+        struktury (płytka, także dla tablic w polach) ma tę samą semantykę co współdzielony wskaźnik."""
+        rt = self.T(rt)
+        if rt.kind != "Data":
+            return False
+        m = self.mangle(rt)
+        return not any(self.mangle(ft) == m for _, fs in self.data_fields(rt) for _, ft in fs)
+
+    def acc(self, rt) -> str:
+        return "." if self.unboxed(rt) else "->"
+
     def field(self, obj, rt, name):
         rt = self.T(rt)
         if rt.kind == "Array" and name == "len":
             return f"({obj}).len"
         cname, fs = self.data_fields(rt)[0]
-        return f"({obj})->u.c_{cname}.f_{cid(name)}"
+        return f"({obj}){self.acc(rt)}u.c_{cname}.f_{cid(name)}"
 
     # ------------------------------------------------------------ zasięgi nazw
     def lookup(self, name):
@@ -438,11 +453,12 @@ class CEmitter:
             return [f"(({subj}) == {lit(p.value)})"], {}
         if p.kind == "bool":
             return [f"(({subj}) == {'true' if p.value else 'false'})"], {}
-        conds = [f"({subj})->tag == TAG_{rt.name}_{p.name}"]
+        ar = self.acc(rt)
+        conds = [f"({subj}){ar}tag == TAG_{rt.name}_{p.name}"]
         binds = {}
         fields = dict(self.data_fields(rt))[p.name]
         for (fn, ft), sp_ in zip(fields, p.args):
-            c, b = self.pat(sp_, f"({subj})->u.c_{p.name}.f_{cid(fn)}", ft)
+            c, b = self.pat(sp_, f"({subj}){ar}u.c_{p.name}.f_{cid(fn)}", ft)
             conds += c
             binds.update(b)
         return conds, binds
@@ -920,6 +936,8 @@ class CEmitter:
     def arm(self, arm, binds, mode):
         self.push_scope()
         for k, (cx, bt) in binds.items():
+            if self.rt_names is not None and k not in self.rt_names:
+                continue           # zmienna wzorca czytana tylko w dowodzie (np. argument lematu)
             c = self.bind(k, False, bt)
             self.w(f"{self.ct(bt)} {c} = {cx};")
         self.valued_expr(arm.body, mode)
@@ -1014,6 +1032,8 @@ class CEmitter:
                 v = self.val(s.expr, bind=s.mutable)
             c = self.bind(s.name, s.mutable, s.rt)
             self.w(f"{self.ct(s.rt)} {c} = {v};")
+            if self.rt_names is not None and s.name not in self.rt_names:
+                self.w(f"(void){c};")      # wartość czytana tylko w dowodzie (obliczenie zostaje)
             if s.type is not None:
                 self.refine_checks(s.rt, c, "refine", ("refine", _ref_span(s.rt), s.span), s.span)
             return
@@ -1059,6 +1079,7 @@ class CEmitter:
             return
         if isinstance(s, Continue):
             lp = self.loops[-1]
+            self.used_labels.add(lp)
             self.w(f"goto {lp};")
             return
         if isinstance(s, Assert):
@@ -1100,7 +1121,8 @@ class CEmitter:
         self.ind -= 1
         self.w("}")
         self.loops.pop()
-        self.w(f"{label}: ;")
+        if label in self.used_labels:
+            self.w(f"{label}: ;")
         if pres:
             self.loop_checks(s.invariants, s.span, "inv-pres")
         if t0 is not None and self.need(("var-dec", s.decreases.span, s.span)):
@@ -1130,7 +1152,8 @@ class CEmitter:
         self.w("}")
         self.loops.pop()
         self.pop_scope()
-        self.w(f"{label}: ;")
+        if label in self.used_labels:
+            self.w(f"{label}: ;")
         self.w(f"{it}++;")
         if pres:
             self.loop_checks(s.invariants, s.span, "inv-pres")
@@ -1171,6 +1194,9 @@ class CEmitter:
                 self.names.add("v_" + pn)
                 self.bind(pn, False, pt, cexpr=f"v_{pn}")
         self.rt_names, uses_old = runtime_names(f, self.unproved, self.need)
+        for (pn, pt, pinout) in sig.params:
+            if pn not in self.rt_names:
+                self.w(f"(void){'p_' if pinout else 'v_'}{pn};   /* parametr używany tylko w kontraktach */")
         if uses_old:
             for (pn, pt, pinout) in sig.params:
                 if pinout:
@@ -1226,7 +1252,7 @@ class CEmitter:
                 args = "".join(", " + self.ct(a) for a in rt.args[:-1])
                 bodies_f.append(f"struct {m} {{ void* env; {self.ct(rt.args[-1])} (*f)(void*{args}); }};")
             elif rt.kind == "Data":
-                fwd.append(f"typedef struct S_{m}* {m};")
+                fwd.append(f"typedef struct S_{m} {m};" if self.unboxed(rt) else f"typedef struct S_{m}* {m};")
                 if rt.name not in seen_tags:
                     seen_tags.add(rt.name)
                     for i, (c, _) in enumerate(self.ch.data[rt.name].rctors):
@@ -1236,7 +1262,10 @@ class CEmitter:
                     if fs:
                         members.append("struct { " + " ".join(f"{self.ct(ft)} f_{cid(fn)};" for fn, ft in fs) + f" }} c_{c};")
                 union = (" union { " + " ".join(members) + " } u;") if members else ""
-                bodies_d.append(f"struct S_{m} {{ int tag;{union} }};")
+                # pola przez wartość wymagają pełnej definicji wcześniej (porządek topologiczny niżej)
+                deps = {self.mangle(ft) for _, fs in self.data_fields(rt) for _, ft in fs
+                        if ft.kind == "Data" and self.unboxed(ft)}
+                bodies_d.append((m, deps, f"struct S_{m} {{ int tag;{union} }};"))
         for m in self.order:
             helpers.append(self.helpers_for(m, self.types[m]))
         extra = []
@@ -1248,6 +1277,16 @@ class CEmitter:
             for n, op in (("add", "+"), ("sub", "-"), ("mul", "*")):
                 extra.append(f"static {o} rz_checked_{n}(rz_i128 a, rz_i128 b) {{ rz_i128 r = a {op} b; "
                              f"return (r < INT64_MIN || r > INT64_MAX) ? {o}_None() : {o}_Some((int64_t)r); }}")
+        ordered, done_d = [], set()
+        pending = list(bodies_d)
+        while pending:
+            for item in pending:
+                if item[1] <= done_d | {item[0]} or not (item[1] & {x[0] for x in pending}):
+                    ordered.append(item[2]); done_d.add(item[0]); pending.remove(item)
+                    break
+            else:
+                raise Unsupported("cykl typów danych przez wartość")
+        bodies_d = ordered
         defs = "\n".join(helpers + extra).split("\n")
         protos = [l[:l.index(") {") + 1] + ";" for l in defs if l.startswith("static ") and ") {" in l]
         return "\n".join(tags + fwd + bodies_a + bodies_f + bodies_d) + "\n\n" + "\n".join(protos + defs) + "\n"
@@ -1294,9 +1333,12 @@ static {e} {m}_fget({m} a, rz_i128 i) {{ if (i < 0 || i >= a.len) rz_trap("wd", 
             fields = self.data_fields(rt)
             for c, fs in fields:
                 ps = ", ".join(f"{self.ct(ft)} a{i}" for i, (_, ft) in enumerate(fs)) or "void"
-                sets = " ".join(f"v->u.c_{c}.f_{cid(fn)} = a{i};" for i, (fn, _) in enumerate(fs))
-                out.append(f"static {m} {m}_{c}({ps}) {{ {m} v = rz_alloc(sizeof *v); v->tag = TAG_{rt.name}_{c}; {sets} return v; }}")
+                ar = self.acc(rt)
+                sets = " ".join(f"v{ar}u.c_{c}.f_{cid(fn)} = a{i};" for i, (fn, _) in enumerate(fs))
+                alloc = f"{m} v = {{0}};" if ar == "." else f"{m} v = rz_alloc(sizeof *v);"
+                out.append(f"static {m} {m}_{c}({ps}) {{ {alloc} v{ar}tag = TAG_{rt.name}_{c}; {sets} return v; }}")
             eqs, prs, ranks = [], [], []
+            ar = self.acc(rt)
             for c, fs in fields:
                 conds = []
                 prints = [f"fputs({cstr(c)}, stdout);"]
@@ -1305,7 +1347,7 @@ static {e} {m}_fget({m} a, rz_i128 i) {{ if (i < 0 || i >= a.len) rz_trap("wd", 
                     prints.append("putchar('(');")
                 for i, (fn, ft) in enumerate(fs):
                     _, eq, pr = self.el_ops(ft)
-                    a, b = f"a->u.c_{c}.f_{cid(fn)}", f"b->u.c_{c}.f_{cid(fn)}"
+                    a, b = f"a{ar}u.c_{c}.f_{cid(fn)}", f"b{ar}u.c_{c}.f_{cid(fn)}"
                     conds.append(eq.format(a, b))
                     if i:
                         prints.append("fputs(\", \", stdout);")
@@ -1317,9 +1359,9 @@ static {e} {m}_fget({m} a, rz_i128 i) {{ if (i < 0 || i >= a.len) rz_trap("wd", 
                 eqs.append(f"case TAG_{rt.name}_{c}: return {' && '.join(conds) or 'true'};")
                 prs.append(f"case TAG_{rt.name}_{c}: {' '.join(prints)} break;")
                 ranks.append(f"case TAG_{rt.name}_{c}: return 1{''.join(' + ' + x for x in rk)};")
-            out.append(f"static bool {m}_eq({m} a, {m} b) {{ if (a->tag != b->tag) return false; switch (a->tag) {{ {' '.join(eqs)} }} return true; }}")
-            out.append(f"static void {m}_pr({m} a) {{ switch (a->tag) {{ {' '.join(prs)} }} }}")
-            out.append(f"static rz_i128 {m}_rank({m} a) {{ switch (a->tag) {{ {' '.join(ranks)} }} return 1; }}")
+            out.append(f"static bool {m}_eq({m} a, {m} b) {{ if (a{ar}tag != b{ar}tag) return false; switch (a{ar}tag) {{ {' '.join(eqs)} }} return true; }}")
+            out.append(f"static void {m}_pr({m} a) {{ switch (a{ar}tag) {{ {' '.join(prs)} }} }}")
+            out.append(f"static rz_i128 {m}_rank({m} a) {{ switch (a{ar}tag) {{ {' '.join(ranks)} }} return 1; }}")
         return "\n".join(out)
 
     # ------------------------------------------------------------ program
@@ -1336,7 +1378,7 @@ static {e} {m}_fget({m} a, rz_i128 i) {{ if (i < 0 || i >= a.len) rz_trap("wd", 
         types = self.type_code()          # rejestruje też typy pomocnicze — ostatnie
         head = [f"/* Moduł wygenerowany przez rzc z programu w języku Rdzeń ({self.file}). Nie edytować ręcznie. */",
                 RUNTIME]
-        return "\n".join(head + [types] + self.protos + [""] + self.defs + main) + "\n"
+        return prune("\n".join(head + [types] + self.protos + [""] + self.defs + main) + "\n")
 
     # ------------------------------------------------------------ harness testów różnicowych
     def cval(self, v, rt):
@@ -1387,6 +1429,87 @@ static {e} {m}_fget({m} a, rz_i128 i) {{ if (i < 0 || i >= a.len) rz_trap("wd", 
         lines.append("    return 0;")
         lines.append("}")
         return ["\n".join(lines)]
+
+
+def _top_items(code):
+    """Podział jednostki C na elementy najwyższego poziomu (dyrektywy, deklaracje, definicje),
+    z pominięciem napisów, znaków i komentarzy przy liczeniu nawiasów."""
+    items, i, n, start, depth = [], 0, len(code), 0, 0
+    while i < n:
+        c = code[i]
+        if depth == 0 and c == "#" and code[start:i].strip() == "":
+            j = code.find("\n", i)
+            j = n if j < 0 else j
+            items.append(code[start:j + 1]); start = i = j + 1
+            continue
+        if code.startswith("/*", i):
+            j = code.find("*/", i + 2)
+            i = n if j < 0 else j + 2
+            continue
+        if code.startswith("//", i):
+            j = code.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        if c in "\"'":
+            j = i + 1
+            while j < n and code[j] != c:
+                j += 2 if code[j] == "\\" else 1
+            i = j + 1
+            continue
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                k = i + 1
+                while k < n and code[k] in " \t":
+                    k += 1
+                if k < n and code[k] in ";,":
+                    i = k            # struct { … }; — koniec przy średniku
+                    continue
+                items.append(code[start:i + 1]); start = i = i + 1
+                continue
+        elif c == ";" and depth == 0:
+            items.append(code[start:i + 1]); start = i = i + 1
+            continue
+        i += 1
+    items.append(code[start:])
+    return items
+
+
+_FN = re.compile(r"^\s*(?:__attribute__\(\(\w+\)\)\s*)?static\b[^(;{=]*?\b(\w+)\s*\(")
+_VAR = re.compile(r"^\s*static\b[^(;{=]*?\b(\w+)\s*=[^;]*;\s*$", re.S)
+_ID = re.compile(r"[A-Za-z_]\w*")
+
+
+def _strip_comments(t):
+    return re.sub(r"/\*.*?\*/", " ", t, flags=re.S)
+
+
+def prune(code):
+    """Usuwa nieużywane funkcje statyczne (pomocnicze typów i środowiska wykonawczego) wraz z ich
+    prototypami. Korzenie: funkcje niestatyczne (`fn_…`, `main`) i wszystko poza funkcjami
+    statycznymi (deklaracje typów, zmienne)."""
+    items = _top_items(code)
+    kind = []          # (nazwa funkcji statycznej | None, czy definicja)
+    for it in items:
+        body = _strip_comments(it)
+        m = _FN.match(body)
+        v = None if m else _VAR.match(body)
+        kind.append((m.group(1), body.rstrip().endswith("}")) if m else (v.group(1), True) if v else (None, False))
+    defs = {name: _strip_comments(it) for it, (name, is_def) in zip(items, kind) if name and is_def}
+    live, work = set(), []
+    for it, (name, is_def) in zip(items, kind):
+        if name is None:
+            work.extend(_ID.findall(_strip_comments(it)))
+    while work:
+        x = work.pop()
+        if x in defs and x not in live:
+            live.add(x)
+            d = defs[x]
+            work.extend(_ID.findall(d.split("(", 1)[1] if "(" in d.split("=", 1)[0] else d.split("=", 1)[1]))
+    out = [it for it, (name, _) in zip(items, kind) if name is None or name in live]
+    return re.sub(r"\n{3,}", "\n\n", "".join(out))
 
 
 def _atomic(v: str) -> bool:

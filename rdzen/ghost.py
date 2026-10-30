@@ -6,7 +6,7 @@ są wymazywane z kodu wynikowego. Zmienne czytane wyłącznie tam (typowo kopie 
 ramy: `let old_xs = xs`) nie muszą istnieć w czasie wykonania — ich kopiowanie jest martwym
 kosztem O(n) w każdym obrocie pętli."""
 from __future__ import annotations
-from .ast import (Node, Assert, Call, Old, Name, Arg, While, For, Let, NON_CHILD)
+from .ast import (Node, Assert, Call, Old, Name, Arg, While, For, Let, Field, IntLit, BoolLit, Try, NON_CHILD)
 
 
 def runtime_names(f, unproved, need):
@@ -30,6 +30,8 @@ def runtime_names(f, unproved, need):
             return
         if isinstance(n, Old):
             olds[0] = True
+        if isinstance(n, Try) and n.desugared is not None:
+            go(n.desugared)        # `?` jest emitowane jako swoje rozwinięcie do `match`
         if isinstance(n, Name):
             names.add(n.name)
         if isinstance(n, Arg) and n.inout:
@@ -52,5 +54,14 @@ def erasable_let(s, rt_names) -> bool:
     """`let x = y` (kopia zmiennej, bez adnotacji typu), gdy `x` nie jest czytane w czasie wykonania.
     Tylko `let`: zmienna `var` może być potem zapisywana (`x = …`, `x[i] = …`), a zapis wymaga
     istniejącej zmiennej w kodzie wynikowym."""
-    return (isinstance(s, Let) and not s.mutable and s.type is None and isinstance(s.expr, Name) and
+    return (isinstance(s, Let) and not s.mutable and s.type is None and _pure(s.expr) and
             rt_names is not None and s.name not in rt_names)
+
+
+def _pure(e) -> bool:
+    """Wyrażenie bez efektów i bez możliwej pułapki: zmienna, literał, pole (także `.len`)."""
+    if isinstance(e, (Name, IntLit, BoolLit)):
+        return True
+    if isinstance(e, Field):
+        return _pure(e.expr)
+    return False
