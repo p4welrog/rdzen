@@ -1,0 +1,31 @@
+data IndexPair { IndexPair(i: Nat, j: Nat) }
+
+fn two_sum(xs: Array<Int>, target: Int) -> Option<IndexPair>
+    requires xs.len <= 200
+    requires forall k in 0..xs.len: -1000000000 <= xs[k] && xs[k] <= 1000000000
+    ensures match result {
+        Some(p) => p.i < p.j && p.j < xs.len && xs[p.i] + xs[p.j] == target,
+        None => forall a in 0..xs.len: forall b in a + 1..xs.len: xs[a] + xs[b] != target,
+    }
+{
+    var i = 0
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len
+        invariant forall a in 0..i: forall b in a + 1..xs.len: xs[a] + xs[b] != target
+        decreases xs.len - i
+    {
+        var j = i + 1
+        while j < xs.len
+            invariant i + 1 <= j && (j <= xs.len || j == i + 1)
+            invariant forall b in i + 1..j: xs[i] + xs[b] != target
+            decreases xs.len - j
+        {
+            if xs[i] + xs[j] == target {
+                return Some(IndexPair(i, j))
+            }
+            j = j + 1
+        }
+        i = i + 1
+    }
+    None
+}

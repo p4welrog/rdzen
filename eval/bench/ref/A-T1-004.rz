@@ -1,0 +1,9 @@
+fn max_of_two(a: Int, b: Int) -> Int
+    ensures result >= a && result >= b && (result == a || result == b)
+{
+    if a >= b {
+        a
+    } else {
+        b
+    }
+}

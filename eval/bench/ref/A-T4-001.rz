@@ -1,0 +1,25 @@
+spec fn fib(n: Nat) -> Nat
+    decreases n
+=
+    if n < 2 { n } else { fib(n - 1) + fib(n - 2) }
+
+fn fibonacci(n: Nat) -> Nat
+    requires n <= 90
+    ensures result == fib(n)
+{
+    var a = 0
+    var b = 1
+    var i = 0
+    while i < n
+        invariant 0 <= i && i <= n
+        invariant a == fib(i) && b == fib(i + 1)
+        invariant 0 <= a && a <= b && b <= 4660046610375530309
+        decreases n - i
+    {
+        let c = a + b
+        a = b
+        b = c
+        i = i + 1
+    }
+    a
+}

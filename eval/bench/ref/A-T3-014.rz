@@ -1,0 +1,28 @@
+data Color { Red, Green, Blue, Black }
+
+fn color_code(code: Int) -> Int
+    ensures code != 0 || result == 16711680
+    ensures code != 1 || result == 65280
+    ensures code != 2 || result == 255
+    ensures (0 <= code && code <= 2) || result == 0
+{
+    let c = if code == 0 {
+        Red
+    } else {
+        if code == 1 {
+            Green
+        } else {
+            if code == 2 {
+                Blue
+            } else {
+                Black
+            }
+        }
+    }
+    match c {
+        Red => 16711680,
+        Green => 65280,
+        Blue => 255,
+        Black => 0,
+    }
+}

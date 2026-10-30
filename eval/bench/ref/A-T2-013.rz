@@ -1,0 +1,6 @@
+fn get_char_code(s: Str, i: Int) -> Nat
+    requires 0 <= i && i < s.len
+    ensures result == s[i]
+{
+    s[i]
+}

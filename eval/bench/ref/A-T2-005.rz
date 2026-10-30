@@ -1,0 +1,41 @@
+spec fn occurs_at(h: Str, n: Str, i: Int) -> Bool =
+    0 <= i && i + n.len <= h.len && forall k in 0..n.len: h[i + k] == n[k]
+
+fn matches_at(h: Str, n: Str, i: Int) -> Bool
+    requires 0 <= i && i + n.len <= h.len
+    ensures result == occurs_at(h, n, i)
+{
+    var k = 0
+    while k < n.len
+        invariant 0 <= k && k <= n.len
+        invariant forall q in 0..k: h[i + q] == n[q]
+        decreases n.len - k
+    {
+        if h[i + k] != n[k] {
+            return false
+        }
+        k = k + 1
+    }
+    true
+}
+
+fn contains_substring(haystack: Str, needle: Str) -> Bool
+    requires haystack.len <= 100 && needle.len <= 100
+    ensures result == (exists i in 0..haystack.len + 1: occurs_at(haystack, needle, i))
+{
+    if needle.len > haystack.len {
+        return false
+    }
+    var i = 0
+    while i + needle.len <= haystack.len
+        invariant 0 <= i && i <= haystack.len - needle.len + 1
+        invariant forall j in 0..i: !occurs_at(haystack, needle, j)
+        decreases haystack.len - i
+    {
+        if matches_at(haystack, needle, i) {
+            return true
+        }
+        i = i + 1
+    }
+    false
+}

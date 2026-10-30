@@ -31,14 +31,19 @@ def mutants(src):
                 yield i + 1, f"{a.strip()} → {b.strip()}", "\n".join(lines[:i] + [ml] + lines[i + 1:])
                 start = k + 1
 
-total = killed = 0
-for p in sorted(sys.argv[1:]):
-    src = open(p).read()
-    for line, desc, m in mutants(src):
-        total += 1
-        r = compile_source(m, canon=False)   # mutant nie musi być kanoniczny
-        if any(d.severity == "error" for d in r.diags):
-            killed += 1
-        else:
-            print(f"PRZEŻYŁ  {os.path.basename(p)}:{line}  {desc}")
-print(f"mutanty: {total}, zabite: {killed}")
+def main(paths):
+    total = killed = 0
+    for p in sorted(paths):
+        src = open(p).read()
+        for line, desc, m in mutants(src):
+            total += 1
+            r = compile_source(m, canon=False)   # mutant nie musi być kanoniczny
+            if any(d.severity == "error" for d in r.diags):
+                killed += 1
+            else:
+                print(f"PRZEŻYŁ  {os.path.basename(p)}:{line}  {desc}")
+    print(f"mutanty: {total}, zabite: {killed}")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])

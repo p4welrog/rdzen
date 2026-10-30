@@ -1,0 +1,25 @@
+data Outcome { Quotient(value: Int), DivByZero }
+
+fn divide(a: Int, b: Int) -> Outcome
+    requires b == 0 || b > 0 || a % b == 0
+    requires a != int_min
+    ensures match result { Quotient(v) => b != 0 && v == a / b, DivByZero => b == 0 }
+{
+    if b == 0 {
+        DivByZero
+    } else {
+        Quotient(a / b)
+    }
+}
+
+fn safe_divide(a: Int, b: Int) -> Int
+    requires -1000000000 <= a && a <= 1000000000 && -1000000000 <= b && b <= 1000000000
+    requires b == 0 || b > 0 || a % b == 0
+    ensures b == 0 || result == a / b
+    ensures b != 0 || result == -1
+{
+    match divide(a, b) {
+        Quotient(v) => v,
+        DivByZero => -1,
+    }
+}

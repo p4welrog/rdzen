@@ -1,0 +1,10 @@
+fn double_or_nothing(x: Int) -> Int
+    requires -1000000000 <= x && x <= 1000000000
+    ensures result == (if x > 0 { 2 * x } else { 0 })
+{
+    if x > 0 {
+        2 * x
+    } else {
+        0
+    }
+}

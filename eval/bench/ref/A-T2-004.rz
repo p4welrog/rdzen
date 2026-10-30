@@ -1,0 +1,5 @@
+fn is_empty_string(s: Str) -> Bool
+    ensures result == (s.len == 0)
+{
+    s.len == 0
+}

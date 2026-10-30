@@ -1,0 +1,13 @@
+fn count_positives(xs: Array<Int>) -> Nat
+    ensures result <= xs.len
+{
+    var c = 0
+    for x in xs
+        invariant 0 <= c && c <= it
+    {
+        if x > 0 {
+            c = c + 1
+        }
+    }
+    c
+}

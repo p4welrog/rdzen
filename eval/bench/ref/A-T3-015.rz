@@ -1,0 +1,11 @@
+data Either { Left(value: Int), Right(value: Int) }
+
+fn either_select(a: Int, b: Int, selector: Int) -> Int
+    ensures result == (if selector > 0 { a } else { b })
+{
+    let e = if selector > 0 { Left(a) } else { Right(b) }
+    match e {
+        Left(v) => v,
+        Right(v) => v,
+    }
+}

@@ -1,0 +1,22 @@
+data IntList { Nil, Cons(head: Int, tail: IntList) }
+
+spec fn len(xs: IntList) -> Nat
+    decreases xs
+=
+    match xs { Nil => 0, Cons(_, t) => 1 + len(t) }
+
+fn rev_onto(xs: IntList, acc: IntList) -> IntList
+    ensures len(result) == len(xs) + len(acc)
+    decreases xs
+{
+    match xs {
+        Nil => acc,
+        Cons(h, t) => rev_onto(t, Cons(h, acc)),
+    }
+}
+
+fn list_reverse(xs: IntList) -> IntList
+    ensures len(result) == len(xs)
+{
+    rev_onto(xs, Nil)
+}

@@ -1,0 +1,5 @@
+fn is_longer_than(s: Str, n: Nat) -> Bool
+    ensures result == (s.len > n)
+{
+    s.len > n
+}

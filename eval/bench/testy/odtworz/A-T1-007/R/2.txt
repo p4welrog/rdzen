@@ -1,0 +1,10 @@
+Poprawka:
+```rdzen
+fn safe_modulo(a: Int, b: Int) -> Int
+    requires b > 0
+    ensures 0 <= result || a < 0
+    ensures result == a % b
+{
+    a % b
+}
+```

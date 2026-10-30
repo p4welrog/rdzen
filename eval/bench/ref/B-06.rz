@@ -1,0 +1,42 @@
+fn second_largest(xs: Array<Int>) -> Option<Int>
+    ensures match result {
+        Some(v) => (exists k in 0..xs.len: xs[k] == v) && exists k in 0..xs.len: xs[k] > v,
+        None => forall a in 0..xs.len: forall b in 0..xs.len: xs[a] == xs[b],
+    }
+{
+    if xs.len == 0 {
+        return None
+    }
+    var m1 = xs[0]
+    var m2: Option<Int> = None
+    var i = 1
+    while i < xs.len
+        invariant 1 <= i && i <= xs.len
+        invariant exists k in 0..i: xs[k] == m1
+        invariant forall k in 0..i: xs[k] <= m1
+        invariant match m2 {
+            Some(v) => v < m1 &&
+                (exists k in 0..i: xs[k] == v) &&
+                forall k in 0..i: xs[k] == m1 || xs[k] <= v,
+            None => forall k in 0..i: xs[k] == m1,
+        }
+        decreases xs.len - i
+    {
+        let x = xs[i]
+        if x > m1 {
+            m2 = Some(m1)
+            m1 = x
+        } else {
+            if x < m1 {
+                match m2 {
+                    Some(v) => if x > v {
+                        m2 = Some(x)
+                    },
+                    None => { m2 = Some(x) },
+                }
+            }
+        }
+        i = i + 1
+    }
+    m2
+}

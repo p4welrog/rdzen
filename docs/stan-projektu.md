@@ -26,6 +26,7 @@ Rdzeń to mały język z kontraktami weryfikowanymi statycznie przez Z3, przezna
 | `lean/Rdzen/*.lean` | mechanizacja metateorii |
 | `REFERENCE.md`, `SKILL.md` | referencja dla piszącego kod; skill `rdzen-verified-code` (zsynchronizowany z kontem) |
 | `examples/`, `eval/`, `tests/cases/` | programy; `examples/sum.rz` i `tests/cases/fail_*` są celowo błędne |
+| `eval/bench/` | ewaluacja: zadania, testy ukryte, wzorce, uprząż, raport, mutacje (protokół w `eval/bench/README.md`) |
 | `docs/stan-projektu.md` | ten plik |
 | `docs/studium-huffman.md` | studium przypadku Huffmana (`examples/huffman.rz`) |
 
@@ -96,15 +97,15 @@ Poza mechanizacją pozostają: funkcje wyższego rzędu, typy danych, tablice, `
 
 ## Otwarte zadania (zaproponowana kolejność: 1 → 4 → 2)
 
-1. **Ewaluacja.** Stały zestaw około 30 zadań ze specyfikacją w języku naturalnym i ukrytymi testami. Trzy warianty: Python bez skilla, Python z testami pisanymi przez model, Rdzeń z rzc. Mierzone:
-   - odsetek rozwiązań przechodzących ukryte testy;
-   - błędy niewykryte przez kompilator ani własne testy;
-   - liczba iteracji i czas;
-   - odsetek zobowiązań udowodnionych w porównaniu ze sprawdzanymi dynamicznie.
-
-   Dodatkowo mutacje kontraktów na próbce rozwiązań.
-
-   Punkt odniesienia: VeraBench (aallan/vera-bench, MIT). 60 zadań w JSON (opis neutralny, sygnatura, kontrakty, testy), wyniki pass@1 dla Very, Pythona i TypeScriptu. Według autorów jest nasycony (średnie 96,7–99,7%). Wniosek: część zadań można przenieść do Rdzenia jako wariant porównywalny z opublikowanymi wynikami, ale potrzebne są też zadania trudniejsze. Główną miarą zostają błędy niewykryte, czyli rozwiązania przechodzące kompilację i własne testy, a odrzucane przez testy ukryte. Porównanie projektowe z Verą: README, sekcja „Prace pokrewne”.
+1. **Ewaluacja — materiały gotowe (`eval/bench/`), brak przebiegów z modelami.**
+   - Zadania: 82 = zestaw A (50 zadań VeraBench poziomów 1–4 z jawną dziedziną i podanymi typami danych) + zestaw B (32 nowe zadania pod błędy niewidoczne w kilku przykładach: przepełnienia, dzielenie obcinane a podłogowe, puste wejścia, duplikaty, wiele poprawnych odpowiedzi).
+   - Do każdego zadania: wyrocznia, generator, przypadki brzegowe z maksymalnymi rozmiarami i wzorzec w Rdzeniu (`ref/`), który przechodzi `rzc check` i około 210 testów ukrytych.
+   - Warianty: P (Python, jedna odpowiedź), PT (Python z własnymi testami, do 6 prób), R (Rdzeń z `REFERENCE.md` i diagnostyką `rzc check`, do 6 prób).
+   - Miary (`raport.py`): błędy niewykryte, poprawność, iteracje, czas, tokeny, pass@1 na przypadkach VeraBench, odsetek zobowiązań udowodnionych. `mutacje.py`: luki w kontraktach na próbce.
+   - Samotest (`eval/bench/samotest.py`, 17 kontroli, ~1 min) obejmuje kontrole negatywne oceniacza i pełną pętlę z odpowiedziami odtwarzanymi.
+   - Do zrobienia: przebiegi z modelami (backend Messages API albo dowolne polecenie), raport.
+   - Zastrzeżenie: repozytorium jest publiczne, więc model nie może mieć do niego dostępu w trakcie przebiegu.
+   - Porównanie projektowe z Verą: README, sekcja „Prace pokrewne”.
 2. **K1: zwalnianie pamięci w C.** Najpierw arena na wywołanie funkcji eksportowanej, później ewentualnie zliczanie referencji.
 3. **K8: węższe typy elementów w C.** `Int` z udowodnionym zakresem zapisywany jako `int32_t` albo `uint8_t`.
 4. **K9: zweryfikowana kolejka i kopiec w bibliotece standardowej.** Huffman w O(n log n).

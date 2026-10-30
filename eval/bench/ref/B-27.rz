@@ -1,0 +1,23 @@
+fn int_to_roman(n: Int) -> Str
+    requires 1 <= n && n <= 3999
+{
+    let vals = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1]
+    let syms = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"]
+    var out: Str = []
+    var m = n
+    var i = 0
+    while i < 13
+        invariant 0 <= i && i <= 13 && 0 <= m && out.len <= 4 * (n - m) + 4 * i
+        decreases 13 - i
+    {
+        while m >= vals[i]
+            invariant 0 <= m && out.len <= 4 * (n - m) + 4 * i
+            decreases m
+        {
+            out = concat(out, syms[i])
+            m = m - vals[i]
+        }
+        i = i + 1
+    }
+    out
+}

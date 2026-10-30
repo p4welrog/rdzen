@@ -1,0 +1,28 @@
+data IntList { Nil, Cons(head: Int, tail: IntList) }
+
+spec fn len(xs: IntList) -> Nat
+    decreases xs
+=
+    match xs { Nil => 0, Cons(_, t) => 1 + len(t) }
+
+spec fn bounded(xs: IntList) -> Bool
+    decreases xs
+=
+    match xs { Nil => true, Cons(h, t) => -1000000000 <= h && h <= 1000000000 && bounded(t) }
+
+spec fn total(xs: IntList) -> Int
+    decreases xs
+=
+    match xs { Nil => 0, Cons(h, t) => h + total(t) }
+
+fn list_sum(xs: IntList) -> Int
+    requires bounded(xs) && len(xs) <= 1000
+    ensures result == total(xs)
+    ensures -1000000000 * len(xs) <= result && result <= 1000000000 * len(xs)
+    decreases xs
+{
+    match xs {
+        Nil => 0,
+        Cons(h, t) => h + list_sum(t),
+    }
+}

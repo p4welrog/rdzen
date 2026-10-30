@@ -1,0 +1,24 @@
+spec fn sorted(xs: Array<Int>) -> Bool =
+    forall a in 0..xs.len: forall b in a..xs.len: xs[a] <= xs[b]
+
+fn dedup_sorted(xs: Array<Int>) -> Array<Int>
+    requires xs.len <= 1000
+    requires sorted(xs)
+    ensures result.len <= xs.len
+    ensures forall k in 1..result.len: result[k - 1] < result[k]
+{
+    var out: Array<Int> = []
+    var i = 0
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len && out.len <= i
+        invariant forall k in 1..out.len: out[k - 1] < out[k]
+        invariant out.len == 0 || (i > 0 && out[out.len - 1] == xs[i - 1])
+        decreases xs.len - i
+    {
+        if i == 0 || xs[i - 1] != xs[i] {
+            push(&out, xs[i])
+        }
+        i = i + 1
+    }
+    out
+}

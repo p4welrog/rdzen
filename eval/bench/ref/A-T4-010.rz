@@ -1,0 +1,11 @@
+fn div_natural(a: Nat, b: Nat) -> Nat
+    requires b > 0
+    ensures result * b <= a && a < (result + 1) * b
+    decreases a
+{
+    if a < b {
+        0
+    } else {
+        1 + div_natural(a - b, b)
+    }
+}

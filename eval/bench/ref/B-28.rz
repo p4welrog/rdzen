@@ -1,0 +1,16 @@
+fn word_count(s: Str) -> Nat
+    ensures result <= s.len
+{
+    var c = 0
+    var prev_space = true
+    for ch in s
+        invariant 0 <= c && c <= it
+    {
+        let sp = ch == b' ' || ch == b'\t' || ch == b'\n'
+        if !sp && prev_space {
+            c = c + 1
+        }
+        prev_space = sp
+    }
+    c
+}

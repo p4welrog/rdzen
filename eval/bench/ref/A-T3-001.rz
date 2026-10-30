@@ -1,0 +1,17 @@
+data IntList { Nil, Cons(head: Int, tail: IntList) }
+
+spec fn len(xs: IntList) -> Nat
+    decreases xs
+=
+    match xs { Nil => 0, Cons(_, t) => 1 + len(t) }
+
+fn list_length(xs: IntList) -> Nat
+    requires len(xs) <= 1000
+    ensures result == len(xs)
+    decreases xs
+{
+    match xs {
+        Nil => 0,
+        Cons(_, t) => 1 + list_length(t),
+    }
+}

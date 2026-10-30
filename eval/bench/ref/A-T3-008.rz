@@ -1,0 +1,17 @@
+data Tree { Leaf(value: Int), Branch(left: Tree, right: Tree) }
+
+spec fn leaves(t: Tree) -> Nat
+    decreases t
+=
+    match t { Leaf(_) => 1, Branch(l, r) => leaves(l) + leaves(r) }
+
+fn tree_count_leaves(t: Tree) -> Nat
+    requires leaves(t) <= 1000
+    ensures result == leaves(t) && result >= 1
+    decreases t
+{
+    match t {
+        Leaf(_) => 1,
+        Branch(l, r) => tree_count_leaves(l) + tree_count_leaves(r),
+    }
+}

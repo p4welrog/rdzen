@@ -1,0 +1,20 @@
+fn ends_with_suffix(s: Str, suffix: Str) -> Bool
+    ensures result == (suffix.len <= s.len && forall k in 0..suffix.len: s[s.len - suffix.len + k] == suffix[k])
+{
+    if suffix.len > s.len {
+        return false
+    }
+    let d = s.len - suffix.len
+    var i = 0
+    while i < suffix.len
+        invariant 0 <= i && i <= suffix.len
+        invariant forall k in 0..i: s[d + k] == suffix[k]
+        decreases suffix.len - i
+    {
+        if s[d + i] != suffix[i] {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}

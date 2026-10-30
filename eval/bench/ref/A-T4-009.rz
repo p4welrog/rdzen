@@ -1,0 +1,16 @@
+data IntList { Nil, Cons(head: Int, tail: IntList) }
+
+spec fn nth(xs: IntList, n: Nat) -> Int
+    decreases xs
+=
+    match xs { Nil => -1, Cons(h, t) => if n == 0 { h } else { nth(t, n - 1) } }
+
+fn list_nth(xs: IntList, n: Nat) -> Int
+    ensures result == nth(xs, n)
+    decreases xs
+{
+    match xs {
+        Nil => -1,
+        Cons(h, t) => if n == 0 { h } else { list_nth(t, n - 1) },
+    }
+}

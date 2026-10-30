@@ -1,0 +1,20 @@
+data Sign { Negative, Zero, Positive }
+
+fn classify_sign(x: Int) -> Int
+    ensures result == (if x > 0 { 1 } else { if x < 0 { -1 } else { 0 } })
+{
+    let s = if x < 0 {
+        Negative
+    } else {
+        if x == 0 {
+            Zero
+        } else {
+            Positive
+        }
+    }
+    match s {
+        Negative => -1,
+        Zero => 0,
+        Positive => 1,
+    }
+}

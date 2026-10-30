@@ -1,0 +1,47 @@
+fn count_of(xs: Array<Int>, v: Int) -> Nat
+    ensures result <= xs.len
+{
+    var c = 0
+    for x in xs
+        invariant 0 <= c && c <= it
+    {
+        if x == v {
+            c = c + 1
+        }
+    }
+    c
+}
+
+fn majority_element(xs: Array<Int>) -> Option<Int>
+    requires xs.len <= 1000
+    ensures match result { Some(v) => exists k in 0..xs.len: xs[k] == v, None => true }
+{
+    if xs.len == 0 {
+        return None
+    }
+    var cand = xs[0]
+    var votes = 0
+    var i = 0
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len && 0 <= votes && votes <= i
+        invariant exists k in 0..xs.len: xs[k] == cand
+        decreases xs.len - i
+    {
+        if votes == 0 {
+            cand = xs[i]
+            votes = 1
+        } else {
+            if xs[i] == cand {
+                votes = votes + 1
+            } else {
+                votes = votes - 1
+            }
+        }
+        i = i + 1
+    }
+    if 2 * count_of(xs, cand) > xs.len {
+        Some(cand)
+    } else {
+        None
+    }
+}

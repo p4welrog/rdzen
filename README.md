@@ -43,7 +43,8 @@ cd lean && lake build          # dowody w Lean 4 (v4.15, bez bibliotek zewnętrz
 
 `REFERENCE.md` — zwięzła referencja języka dla piszącego kod; `SKILL.md` — skill z przepływem
 pracy (specyfikacja → weryfikacja → emisja). `eval/` — programy napisane wyłącznie na podstawie
-referencji.
+referencji; `eval/bench/` — ewaluacja Python / Python z testami / Rdzeń na 82 zadaniach
+(protokół w `eval/bench/README.md`).
 
 ## Zakres prototypu
 
@@ -135,8 +136,8 @@ z gotową specyfikacją i ze specyfikacją pisaną przez model. Dla Very v0.1.8 
 jeden przebieg) średnie wynoszą: Vera 98,7%, Python 96,7%, TypeScript 99,7%. Autorzy
 zaznaczają, że benchmark jest nasycony: różnice mają szerokość 1–2 zadań. Benchmark nie mierzy
 błędów niewykrytych przez kompilator ani udziału zobowiązań udowodnionych statycznie, a te
-miary planowana ewaluacja Rdzenia stawia na pierwszym miejscu (`docs/stan-projektu.md`,
-zadanie 1).
+miary ewaluacja Rdzenia (`eval/bench/`) stawia na pierwszym miejscu. Jej zestaw A to
+zadania poziomów 1–4 VeraBench przeniesione do Rdzenia.
 
 ## Licencje
 
@@ -147,6 +148,7 @@ zadanie 1).
 | Środowisko wykonawcze wklejane do modułów generowanych przez `rzc emit` i `rzc emit-c` | [0BSD](LICENSE-0BSD-RUNTIME) — wygenerowany kod nie wymaga noty licencyjnej |
 | Mechanizacja (`lean/`) | `MIT OR Apache-2.0` |
 | Przykłady (`examples/`, `eval/`, `tests/cases/`) | `MIT OR Apache-2.0` |
+| Dane i opisy zadań zestawu A ewaluacji (`eval/bench/dane/`, `eval/bench/zestaw_a.py`) | MIT — pochodzą z VeraBench, © 2026 Alasdair Allan ([LICENSE-VeraBench](eval/bench/LICENSE-VeraBench)) |
 
 Program napisany w Rdzeniu i wygenerowany z niego moduł należą do autora programu.
 

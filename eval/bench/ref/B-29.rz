@@ -1,0 +1,36 @@
+fn edit_distance(a: Str, b: Str) -> Nat
+    requires a.len <= 30 && b.len <= 30
+{
+    var prev: Array<Int> = []
+    var k = 0
+    while k <= b.len
+        invariant 0 <= k && k <= b.len + 1 && prev.len == k
+        invariant forall q in 0..k: prev[q] == q
+        decreases b.len + 1 - k
+    {
+        push(&prev, k)
+        k = k + 1
+    }
+    var i = 1
+    while i <= a.len
+        invariant 1 <= i && i <= a.len + 1 && prev.len == b.len + 1
+        invariant forall q in 0..prev.len: 0 <= prev[q] && prev[q] <= i - 1 + q
+        decreases a.len + 1 - i
+    {
+        var cur = filled(b.len + 1, i)
+        var j = 1
+        while j <= b.len
+            invariant 1 <= j && j <= b.len + 1 && cur.len == b.len + 1 && prev.len == b.len + 1
+            invariant forall q in 0..cur.len: 0 <= cur[q] && cur[q] <= i + q
+            invariant forall q in 0..prev.len: 0 <= prev[q] && prev[q] <= i - 1 + q
+            decreases b.len + 1 - j
+        {
+            let sub = if a[i - 1] == b[j - 1] { 0 } else { 1 }
+            cur[j] = min(min(prev[j] + 1, cur[j - 1] + 1), prev[j - 1] + sub)
+            j = j + 1
+        }
+        prev = cur
+        i = i + 1
+    }
+    prev[b.len]
+}

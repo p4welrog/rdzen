@@ -1,0 +1,11 @@
+fn sum_to_n(n: Nat) -> Nat
+    requires n <= 1000000
+    ensures result == n * (n + 1) / 2
+    decreases n
+{
+    if n == 0 {
+        0
+    } else {
+        n + sum_to_n(n - 1)
+    }
+}

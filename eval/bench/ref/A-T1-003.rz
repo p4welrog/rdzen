@@ -1,0 +1,13 @@
+fn signum(x: Int) -> Int
+    ensures result == (if x > 0 { 1 } else { if x < 0 { -1 } else { 0 } })
+{
+    if x > 0 {
+        1
+    } else {
+        if x < 0 {
+            -1
+        } else {
+            0
+        }
+    }
+}

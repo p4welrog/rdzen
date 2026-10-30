@@ -139,7 +139,8 @@ def cmd_run(path, fn, args):
     try:
         v, outs = Interp(ch).call_fn(sig, vals, None)
     except Violation as v:
-        print(f"pułapka: naruszenie `{v.kind}` w wierszu {v.span.line}" + (f" ({v.detail})" if v.detail else ""))
+        gdzie = f" w wierszu {v.span.line}" if v.span is not None else " przy wywołaniu z wiersza poleceń (argumenty nie spełniają warunku wstępnego)"
+        print(f"pułapka: naruszenie `{v.kind}`{gdzie}" + (f" ({v.detail})" if v.detail else ""))
         return 2
     print(fmt(v))
     for (pn, _, inout), o in zip([p for p in sig.params if p[2]], outs):

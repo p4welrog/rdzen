@@ -1,0 +1,8 @@
+fn option_unwrap_or(opt: Option<Int>, default: Int) -> Int
+    ensures result == (match opt { Some(v) => v, None => default })
+{
+    match opt {
+        Some(v) => v,
+        None => default,
+    }
+}

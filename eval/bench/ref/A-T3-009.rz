@@ -1,0 +1,16 @@
+data IntList { Nil, Cons(head: Int, tail: IntList) }
+
+spec fn len(xs: IntList) -> Nat
+    decreases xs
+=
+    match xs { Nil => 0, Cons(_, t) => 1 + len(t) }
+
+fn list_append(xs: IntList, ys: IntList) -> IntList
+    ensures len(result) == len(xs) + len(ys)
+    decreases xs
+{
+    match xs {
+        Nil => ys,
+        Cons(h, t) => Cons(h, list_append(t, ys)),
+    }
+}

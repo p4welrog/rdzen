@@ -1,0 +1,32 @@
+fn is_leap(y: Int) -> Bool {
+    y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)
+}
+
+fn day_of_year(year: Int, month: Int, day: Int) -> Option<Int>
+    requires 1 <= year && year <= 9999
+    ensures match result { Some(v) => 1 <= v && v <= 366, None => true }
+{
+    if month < 1 || month > 12 || day < 1 {
+        return None
+    }
+    let feb = if is_leap(year) { 29 } else { 28 }
+    let dm = [31, feb, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    if day > dm[month - 1] {
+        return None
+    }
+    var total = 0
+    var k = 0
+    while k < month - 1
+        invariant 0 <= k && k <= month - 1 && 0 <= total && total <= 31 * k
+        invariant k <= 11
+        decreases month - 1 - k
+    {
+        total = total + dm[k]
+        k = k + 1
+    }
+    if total + day <= 366 {
+        Some(total + day)
+    } else {
+        None
+    }
+}

@@ -1,0 +1,17 @@
+data Tree { Leaf(value: Int), Branch(left: Tree, right: Tree) }
+
+spec fn depth(t: Tree) -> Nat
+    decreases t
+=
+    match t { Leaf(_) => 1, Branch(l, r) => 1 + max(depth(l), depth(r)) }
+
+fn tree_depth(t: Tree) -> Nat
+    requires depth(t) <= 1000
+    ensures result == depth(t)
+    decreases t
+{
+    match t {
+        Leaf(_) => 1,
+        Branch(l, r) => 1 + max(tree_depth(l), tree_depth(r)),
+    }
+}

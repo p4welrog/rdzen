@@ -1,0 +1,7 @@
+fn safe_modulo(a: Int, b: Int) -> Int
+    requires a >= 0 && b > 0
+    ensures 0 <= result && result < b
+    ensures result == a % b
+{
+    a % b
+}

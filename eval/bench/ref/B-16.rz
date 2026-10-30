@@ -1,0 +1,19 @@
+fn pow_mod(base: Nat, exp: Nat, m: Nat) -> Nat
+    requires 1 <= m && m <= 1000000000
+    ensures 0 <= result && result < m
+{
+    var r = 1 % m
+    var b = base % m
+    var e = exp
+    while e > 0
+        invariant 0 <= r && r < m && 0 <= b && b < m && e >= 0
+        decreases e
+    {
+        if e % 2 == 1 {
+            r = r * b % m
+        }
+        b = b * b % m
+        e = e / 2
+    }
+    r
+}

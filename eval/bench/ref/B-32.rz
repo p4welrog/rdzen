@@ -1,0 +1,33 @@
+data Expr {
+    Lit(value: Int),
+    Add(left: Expr, right: Expr),
+    Mul(left: Expr, right: Expr),
+    Div(left: Expr, right: Expr),
+}
+
+fn eval_checked(e: Expr) -> Option<Int>
+    decreases e
+{
+    match e {
+        Lit(v) => Some(v),
+        Add(l, r) => {
+            let a = eval_checked(l)?
+            let b = eval_checked(r)?
+            checked_add(a, b)
+        },
+        Mul(l, r) => {
+            let a = eval_checked(l)?
+            let b = eval_checked(r)?
+            checked_mul(a, b)
+        },
+        Div(l, r) => {
+            let a = eval_checked(l)?
+            let b = eval_checked(r)?
+            if b == 0 || (a == int_min && b == -1) {
+                None
+            } else {
+                Some(a / b)
+            }
+        },
+    }
+}

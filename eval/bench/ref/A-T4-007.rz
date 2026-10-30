@@ -1,0 +1,10 @@
+fn count_digits(n: Nat) -> Nat
+    ensures result >= 1
+    decreases n
+{
+    if n < 10 {
+        1
+    } else {
+        1 + count_digits(n / 10)
+    }
+}

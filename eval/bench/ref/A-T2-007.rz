@@ -1,0 +1,19 @@
+fn double_elements(xs: Array<Int>) -> Array<Int>
+    requires xs.len <= 1000
+    requires forall k in 0..xs.len: -1000000000 <= xs[k] && xs[k] <= 1000000000
+    ensures result.len == xs.len
+    ensures forall k in 0..xs.len: result[k] == 2 * xs[k]
+{
+    var out = xs
+    var i = 0
+    while i < out.len
+        invariant 0 <= i && i <= xs.len && out.len == xs.len
+        invariant forall k in 0..i: out[k] == 2 * xs[k]
+        invariant forall k in i..xs.len: out[k] == xs[k]
+        decreases xs.len - i
+    {
+        out[i] = 2 * out[i]
+        i = i + 1
+    }
+    out
+}

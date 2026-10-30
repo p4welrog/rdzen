@@ -1,0 +1,52 @@
+fn append_num(inout out: Str, n: Int)
+    requires 1 <= n && n <= 1000 && out.len <= 100000
+    ensures out.len <= old(out).len + 4
+{
+    var digits: Array<Int> = []
+    var m = n
+    while m > 0
+        invariant 0 <= m && m <= 1000 && digits.len <= 4
+        invariant (m < 1 || digits.len <= 3) &&
+            (m < 10 || digits.len <= 2) &&
+            (m < 100 || digits.len <= 1)
+        invariant (m < 1000 || digits.len == 0) &&
+            forall k in 0..digits.len: 0 <= digits[k] && digits[k] <= 9
+        decreases m
+    {
+        push(&digits, m % 10)
+        m = m / 10
+    }
+    var k = digits.len
+    while k > 0
+        invariant 0 <= k && k <= digits.len && out.len <= old(out).len + digits.len - k
+        decreases k
+    {
+        k = k - 1
+        push(&out, b'0' + digits[k])
+    }
+}
+
+fn compress(s: Str) -> Str
+    requires s.len <= 200
+{
+    var out: Str = []
+    var i = 0
+    while i < s.len
+        invariant 0 <= i && i <= s.len && out.len <= 5 * i
+        decreases s.len - i
+    {
+        var j = i
+        while j < s.len && s[j] == s[i]
+            invariant i <= j && j <= s.len
+            decreases s.len - j
+        {
+            j = j + 1
+        }
+        push(&out, s[i])
+        if j - i > 1 {
+            append_num(&out, j - i)
+        }
+        i = j
+    }
+    out
+}

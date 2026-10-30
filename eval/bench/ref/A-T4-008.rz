@@ -1,0 +1,11 @@
+fn multiply(a: Nat, b: Nat) -> Nat
+    requires a <= 1000000000 && b <= 1000000
+    ensures result == a * b
+    decreases b
+{
+    if b == 0 {
+        0
+    } else {
+        a + multiply(a, b - 1)
+    }
+}

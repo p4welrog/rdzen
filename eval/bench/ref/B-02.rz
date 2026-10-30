@@ -1,0 +1,33 @@
+spec fn sorted(xs: Array<Int>) -> Bool =
+    forall a in 0..xs.len: forall b in a..xs.len: xs[a] <= xs[b]
+
+spec fn sorted_prefix(xs: Array<Int>, n: Int) -> Bool =
+    forall k in 1..n: xs[k - 1] <= xs[k]
+
+fn merge_sorted(a: Array<Int>, b: Array<Int>) -> Array<Int>
+    requires a.len <= 1000 && b.len <= 1000
+    requires sorted(a) && sorted(b)
+    ensures result.len == a.len + b.len
+    ensures forall k in 1..result.len: result[k - 1] <= result[k]
+{
+    var out: Array<Int> = []
+    var i = 0
+    var j = 0
+    while i < a.len || j < b.len
+        invariant 0 <= i && i <= a.len && 0 <= j && j <= b.len
+        invariant out.len == i + j
+        invariant forall k in 1..out.len: out[k - 1] <= out[k]
+        invariant out.len == 0 || i >= a.len || out[out.len - 1] <= a[i]
+        invariant out.len == 0 || j >= b.len || out[out.len - 1] <= b[j]
+        decreases a.len + b.len - i - j
+    {
+        if j >= b.len || (i < a.len && a[i] <= b[j]) {
+            push(&out, a[i])
+            i = i + 1
+        } else {
+            push(&out, b[j])
+            j = j + 1
+        }
+    }
+    out
+}

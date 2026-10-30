@@ -1,0 +1,21 @@
+fn is_even(n: Nat) -> Bool
+    ensures result == (n % 2 == 0)
+    decreases n
+{
+    if n == 0 {
+        true
+    } else {
+        is_odd(n - 1)
+    }
+}
+
+fn is_odd(n: Nat) -> Bool
+    ensures result == (n % 2 == 1)
+    decreases n
+{
+    if n == 0 {
+        false
+    } else {
+        is_even(n - 1)
+    }
+}

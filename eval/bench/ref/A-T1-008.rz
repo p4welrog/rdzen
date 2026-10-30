@@ -1,0 +1,10 @@
+fn distance(a: Int, b: Int) -> Nat
+    requires -1000000000 <= a && a <= 1000000000 && -1000000000 <= b && b <= 1000000000
+    ensures result == a - b || result == b - a
+{
+    if a >= b {
+        a - b
+    } else {
+        b - a
+    }
+}

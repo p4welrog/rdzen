@@ -1,0 +1,31 @@
+fn balanced_brackets(s: Str) -> Bool
+    requires s.len <= 200
+{
+    var st: Array<Int> = []
+    for c in s
+        invariant st.len <= it
+    {
+        if c == b'(' || c == b'[' || c == b'{' {
+            push(&st, c)
+        } else {
+            if c == b')' || c == b']' || c == b'}' {
+                let want = if c == b')' {
+                    b'('
+                } else {
+                    if c == b']' {
+                        b'['
+                    } else {
+                        b'{'
+                    }
+                }
+                match pop(&st) {
+                    Some(o) => if o != want {
+                        return false
+                    },
+                    None => { return false },
+                }
+            }
+        }
+    }
+    st.len == 0
+}

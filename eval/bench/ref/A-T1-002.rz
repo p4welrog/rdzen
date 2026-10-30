@@ -1,0 +1,17 @@
+fn clamp_to_range(value: Int, lo: Int, hi: Int) -> Int
+    requires lo <= hi
+    ensures lo <= result && result <= hi
+    ensures (value < lo && result == lo) ||
+        (value > hi && result == hi) ||
+        (lo <= value && value <= hi && result == value)
+{
+    if value < lo {
+        lo
+    } else {
+        if value > hi {
+            hi
+        } else {
+            value
+        }
+    }
+}

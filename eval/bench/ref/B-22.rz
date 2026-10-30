@@ -1,0 +1,37 @@
+fn parse_int(s: Str) -> Option<Int> {
+    if s.len == 0 {
+        return None
+    }
+    let neg = s[0] == b'-'
+    let start = if s[0] == b'-' || s[0] == b'+' { 1 } else { 0 }
+    if start == s.len {
+        return None
+    }
+    // akumulacja wartości ujemnej, żeby zmieścić int_min
+    var v = 0
+    var i = start
+    while i < s.len
+        invariant start <= i && i <= s.len && v <= 0
+        decreases s.len - i
+    {
+        if !is_digit(s[i]) {
+            return None
+        }
+        let t = checked_mul(v, 10)?
+        let u = checked_sub(t, s[i] - b'0')?
+        if u > 0 {
+            return None
+        }
+        v = u
+        i = i + 1
+    }
+    if neg {
+        Some(v)
+    } else {
+        if v == int_min {
+            None
+        } else {
+            Some(-v)
+        }
+    }
+}

@@ -1,0 +1,15 @@
+fn join_strings(parts: Array<Str>, sep: Str) -> Str
+    requires parts.len <= 20 && sep.len <= 100
+    requires forall k in 0..parts.len: parts[k].len <= 100
+{
+    var out: Str = []
+    for p in parts
+        invariant out.len <= 200 * it
+    {
+        if it > 0 {
+            out = concat(out, sep)
+        }
+        out = concat(out, p)
+    }
+    out
+}

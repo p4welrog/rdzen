@@ -1,0 +1,19 @@
+fn to_upper(s: Str) -> Str
+    ensures result.len == s.len
+    ensures forall k in 0..s.len: result[k] == (if is_lower(s[k]) { s[k] - 32 } else { s[k] })
+{
+    var out = s
+    var i = 0
+    while i < out.len
+        invariant 0 <= i && i <= s.len && out.len == s.len
+        invariant forall k in 0..i: out[k] == (if is_lower(s[k]) { s[k] - 32 } else { s[k] })
+        invariant forall k in i..s.len: out[k] == s[k]
+        decreases s.len - i
+    {
+        if is_lower(out[i]) {
+            out[i] = out[i] - 32
+        }
+        i = i + 1
+    }
+    out
+}

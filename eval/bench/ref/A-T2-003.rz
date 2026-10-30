@@ -1,0 +1,6 @@
+fn greet(name: Str) -> Str
+    requires name.len >= 1 && name.len <= 100
+    ensures result.len == name.len + 8
+{
+    concat(concat("Hello, ", name), "!")
+}

@@ -1,0 +1,30 @@
+spec fn sorted(xs: Array<Int>) -> Bool =
+    forall a in 0..xs.len: forall b in a..xs.len: xs[a] <= xs[b]
+
+fn first_index_of(xs: Array<Int>, target: Int) -> Int
+    requires sorted(xs)
+    ensures -1 <= result && result < xs.len
+    ensures result == -1 || (xs[result] == target && forall k in 0..result: xs[k] != target)
+    ensures result != -1 || forall k in 0..xs.len: xs[k] != target
+{
+    var lo = 0
+    var hi = xs.len
+    while lo < hi
+        invariant 0 <= lo && lo <= hi && hi <= xs.len
+        invariant forall k in 0..lo: xs[k] < target
+        invariant forall k in hi..xs.len: xs[k] >= target
+        decreases hi - lo
+    {
+        let mid = lo + (hi - lo) / 2
+        if xs[mid] < target {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+    if lo < xs.len && xs[lo] == target {
+        lo
+    } else {
+        -1
+    }
+}

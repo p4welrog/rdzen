@@ -1,0 +1,23 @@
+fn longest_increasing_run(xs: Array<Int>) -> Nat
+    ensures result <= xs.len
+    ensures xs.len == 0 || result >= 1
+{
+    var best = 0
+    var cur = 0
+    var i = 0
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len
+        invariant 0 <= cur && cur <= i && cur <= best && best <= i
+        invariant i == 0 || cur >= 1
+        decreases xs.len - i
+    {
+        if i > 0 && xs[i - 1] < xs[i] {
+            cur = cur + 1
+        } else {
+            cur = 1
+        }
+        best = max(best, cur)
+        i = i + 1
+    }
+    best
+}

@@ -1,0 +1,30 @@
+data Span { Span(lo: Int, hi: Int) }
+
+fn merge_intervals(spans: Array<Span>) -> Array<Span>
+    requires spans.len <= 200
+    requires forall k in 0..spans.len: spans[k].lo <= spans[k].hi
+    requires forall k in 1..spans.len: spans[k - 1].lo <= spans[k].lo
+    ensures result.len <= spans.len
+    ensures forall k in 0..result.len: result[k].lo <= result[k].hi
+    ensures forall k in 1..result.len: result[k - 1].hi < result[k].lo
+{
+    var out: Array<Span> = []
+    var i = 0
+    while i < spans.len
+        invariant 0 <= i && i <= spans.len && out.len <= i
+        invariant forall k in 0..out.len: out[k].lo <= out[k].hi
+        invariant forall k in 1..out.len: out[k - 1].hi < out[k].lo
+        invariant i == 0 || out.len >= 1
+        decreases spans.len - i
+    {
+        let s = spans[i]
+        if out.len > 0 && s.lo <= out[out.len - 1].hi {
+            let last = out[out.len - 1]
+            out[out.len - 1] = Span(last.lo, max(last.hi, s.hi))
+        } else {
+            push(&out, s)
+        }
+        i = i + 1
+    }
+    out
+}

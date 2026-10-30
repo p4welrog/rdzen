@@ -1,0 +1,20 @@
+fn caesar(s: Str, k: Int) -> Str
+    ensures result.len == s.len
+{
+    var r = k % 26
+    if r < 0 {
+        r = r + 26
+    }
+    var out = s
+    var i = 0
+    while i < out.len
+        invariant 0 <= i && i <= s.len && out.len == s.len && 0 <= r && r < 26
+        decreases s.len - i
+    {
+        if is_lower(out[i]) {
+            out[i] = 97 + (out[i] - 97 + r) % 26
+        }
+        i = i + 1
+    }
+    out
+}

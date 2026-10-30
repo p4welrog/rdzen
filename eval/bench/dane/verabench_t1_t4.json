@@ -1,0 +1,2150 @@
+{
+ "zrodlo": "https://github.com/aallan/vera-bench (problems/tier1–tier4)",
+ "commit": "c33fe27d49ce15fa71db324347dbbde348c53c7c",
+ "licencja": "MIT, Copyright (c) 2026 Alasdair Allan — pełny tekst w LICENSE-VeraBench",
+ "zadania": [
+  {
+   "id": "VB-T1-001",
+   "tier": 1,
+   "title": "Absolute Value",
+   "description_neutral": "Compute the absolute value of an integer. Returns a non-negative integer that equals either the input or its negation.",
+   "test_cases": [
+    {
+     "args": [
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      42
+     ],
+     "expected": 42
+    },
+    {
+     "args": [
+      -42
+     ],
+     "expected": 42
+    },
+    {
+     "args": [
+      1
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      -1
+     ],
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-002",
+   "tier": 1,
+   "title": "Clamp to Range",
+   "description_neutral": "Clamp an integer to a range [lo, hi]. Takes three parameters: value, lo, hi (where lo <= hi). Returns lo if value < lo, hi if value > hi, otherwise value.",
+   "test_cases": [
+    {
+     "args": [
+      50,
+      0,
+      100
+     ],
+     "expected": 50
+    },
+    {
+     "args": [
+      -5,
+      0,
+      100
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      150,
+      0,
+      100
+     ],
+     "expected": 100
+    },
+    {
+     "args": [
+      0,
+      0,
+      0
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-003",
+   "tier": 1,
+   "title": "Signum",
+   "description_neutral": "Return the sign of an integer: -1 for negative, 0 for zero, 1 for positive.",
+   "test_cases": [
+    {
+     "args": [
+      42
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      -7
+     ],
+     "expected": -1
+    },
+    {
+     "args": [
+      0
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-004",
+   "tier": 1,
+   "title": "Maximum of Two",
+   "description_neutral": "Return the larger of two integers.",
+   "test_cases": [
+    {
+     "args": [
+      3,
+      7
+     ],
+     "expected": 7
+    },
+    {
+     "args": [
+      7,
+      3
+     ],
+     "expected": 7
+    },
+    {
+     "args": [
+      5,
+      5
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      -1,
+      -5
+     ],
+     "expected": -1
+    },
+    {
+     "args": [
+      0,
+      0
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-005",
+   "tier": 1,
+   "title": "Minimum of Two",
+   "description_neutral": "Return the smaller of two integers.",
+   "test_cases": [
+    {
+     "args": [
+      3,
+      7
+     ],
+     "expected": 3
+    },
+    {
+     "args": [
+      7,
+      3
+     ],
+     "expected": 3
+    },
+    {
+     "args": [
+      5,
+      5
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      -1,
+      -5
+     ],
+     "expected": -5
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-006",
+   "tier": 1,
+   "title": "Is Positive",
+   "description_neutral": "Return true if the integer is strictly positive (greater than zero), false otherwise.",
+   "test_cases": [
+    {
+     "args": [
+      5
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      -3
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      1
+     ],
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-007",
+   "tier": 1,
+   "title": "Safe Modulo",
+   "description_neutral": "Compute a modulo b. The divisor must be non-zero.",
+   "test_cases": [
+    {
+     "args": [
+      10,
+      3
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      7,
+      2
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      6,
+      3
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      5,
+      7
+     ],
+     "expected": 5
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-008",
+   "tier": 1,
+   "title": "Distance",
+   "description_neutral": "Compute the absolute difference between two integers. Returns a non-negative integer.",
+   "test_cases": [
+    {
+     "args": [
+      3,
+      7
+     ],
+     "expected": 4
+    },
+    {
+     "args": [
+      7,
+      3
+     ],
+     "expected": 4
+    },
+    {
+     "args": [
+      5,
+      5
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      -3,
+      3
+     ],
+     "expected": 6
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-009",
+   "tier": 1,
+   "title": "Maximum of Three",
+   "description_neutral": "Return the largest of three integers.",
+   "test_cases": [
+    {
+     "args": [
+      3,
+      7,
+      5
+     ],
+     "expected": 7
+    },
+    {
+     "args": [
+      9,
+      1,
+      4
+     ],
+     "expected": 9
+    },
+    {
+     "args": [
+      2,
+      2,
+      8
+     ],
+     "expected": 8
+    },
+    {
+     "args": [
+      5,
+      5,
+      5
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      -1,
+      -2,
+      -3
+     ],
+     "expected": -1
+    }
+   ]
+  },
+  {
+   "id": "VB-T1-010",
+   "tier": 1,
+   "title": "Double or Nothing",
+   "description_neutral": "Double a positive integer. Return 0 for non-positive inputs.",
+   "test_cases": [
+    {
+     "args": [
+      5
+     ],
+     "expected": 10
+    },
+    {
+     "args": [
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      -3
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      1
+     ],
+     "expected": 2
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-001",
+   "tier": 2,
+   "title": "Sum Array",
+   "description_neutral": "Sum all elements of an integer list.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       1,
+       2,
+       3,
+       4
+      ]
+     ],
+     "expected": 10
+    },
+    {
+     "args": [
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       -5,
+       5
+      ]
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       7
+      ]
+     ],
+     "expected": 7
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-002",
+   "tier": 2,
+   "title": "Filter Positives",
+   "description_neutral": "Return a new list containing only the positive elements from an integer list.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       1,
+       -2,
+       3
+      ]
+     ],
+     "expected": [
+      1,
+      3
+     ]
+    },
+    {
+     "args": [
+      []
+     ],
+     "expected": []
+    },
+    {
+     "args": [
+      [
+       -1,
+       -2
+      ]
+     ],
+     "expected": []
+    },
+    {
+     "args": [
+      [
+       0,
+       1
+      ]
+     ],
+     "expected": [
+      1
+     ]
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-003",
+   "tier": 2,
+   "title": "Greeting",
+   "description_neutral": "Build a greeting string. Given a name, return 'Hello, <name>!'. The name is guaranteed to be non-empty.",
+   "test_cases": [
+    {
+     "args": [
+      "world"
+     ],
+     "expected": "Hello, world!"
+    },
+    {
+     "args": [
+      "Ada"
+     ],
+     "expected": "Hello, Ada!"
+    },
+    {
+     "args": [
+      "x"
+     ],
+     "expected": "Hello, x!"
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-004",
+   "tier": 2,
+   "title": "Is Empty String",
+   "description_neutral": "Check if a string is empty by comparing its length to zero.",
+   "test_cases": [
+    {
+     "args": [
+      ""
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "hello"
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      " "
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "0"
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-005",
+   "tier": 2,
+   "title": "Contains Substring",
+   "description_neutral": "Check if the first string contains the second string as a substring.",
+   "test_cases": [
+    {
+     "args": [
+      "hello world",
+      "world"
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "hello world",
+      "mars"
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "abcdef",
+      "cde"
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "abc",
+      ""
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "",
+      "a"
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-006",
+   "tier": 2,
+   "title": "Join Strings",
+   "description_neutral": "Join a list of strings with a separator string.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       "a",
+       "b",
+       "c"
+      ],
+      "-"
+     ],
+     "expected": "a-b-c"
+    },
+    {
+     "args": [
+      [
+       "solo"
+      ],
+      ","
+     ],
+     "expected": "solo"
+    },
+    {
+     "args": [
+      [],
+      ","
+     ],
+     "expected": ""
+    },
+    {
+     "args": [
+      [
+       "x",
+       "y"
+      ],
+      ""
+     ],
+     "expected": "xy"
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-007",
+   "tier": 2,
+   "title": "Double Elements",
+   "description_neutral": "Double every element in an integer list.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       1,
+       2,
+       3
+      ]
+     ],
+     "expected": [
+      2,
+      4,
+      6
+     ]
+    },
+    {
+     "args": [
+      []
+     ],
+     "expected": []
+    },
+    {
+     "args": [
+      [
+       -3,
+       0
+      ]
+     ],
+     "expected": [
+      -6,
+      0
+     ]
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-008",
+   "tier": 2,
+   "title": "Count Positives",
+   "description_neutral": "Count how many positive elements are in an integer list.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       1,
+       -2,
+       3
+      ]
+     ],
+     "expected": 2
+    },
+    {
+     "args": [
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       -1,
+       -2
+      ]
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       0,
+       0
+      ]
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-009",
+   "tier": 2,
+   "title": "To Upper Case",
+   "description_neutral": "Convert a string to uppercase.",
+   "test_cases": [
+    {
+     "args": [
+      "abc"
+     ],
+     "expected": "ABC"
+    },
+    {
+     "args": [
+      ""
+     ],
+     "expected": ""
+    },
+    {
+     "args": [
+      "MiXeD 42!"
+     ],
+     "expected": "MIXED 42!"
+    },
+    {
+     "args": [
+      "ALREADY"
+     ],
+     "expected": "ALREADY"
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-010",
+   "tier": 2,
+   "title": "Sum Positives",
+   "description_neutral": "Sum only the positive elements in an integer list.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       1,
+       -2,
+       3
+      ]
+     ],
+     "expected": 4
+    },
+    {
+     "args": [
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       -1,
+       -2
+      ]
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       0,
+       5
+      ]
+     ],
+     "expected": 5
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-011",
+   "tier": 2,
+   "title": "Starts With Prefix",
+   "description_neutral": "Check if the first string starts with the second string as a prefix.",
+   "test_cases": [
+    {
+     "args": [
+      "hello",
+      "hel"
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "hello",
+      "world"
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "",
+      ""
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "abc",
+      "abcd"
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "abc",
+      ""
+     ],
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-012",
+   "tier": 2,
+   "title": "Ends With Suffix",
+   "description_neutral": "Check if the first string ends with the second string as a suffix.",
+   "test_cases": [
+    {
+     "args": [
+      "hello",
+      "llo"
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "hello",
+      "world"
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "",
+      ""
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "abc",
+      "abcd"
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "abc",
+      ""
+     ],
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-013",
+   "tier": 2,
+   "title": "Get Char Code",
+   "description_neutral": "Return the ASCII character code at a given index in a string.",
+   "test_cases": [
+    {
+     "args": [
+      "A",
+      0
+     ],
+     "expected": 65
+    },
+    {
+     "args": [
+      "hello",
+      0
+     ],
+     "expected": 104
+    },
+    {
+     "args": [
+      "hello",
+      4
+     ],
+     "expected": 111
+    },
+    {
+     "args": [
+      "Z",
+      0
+     ],
+     "expected": 90
+    },
+    {
+     "args": [
+      "abc",
+      2
+     ],
+     "expected": 99
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-014",
+   "tier": 2,
+   "title": "Combined String Length",
+   "description_neutral": "Return the combined length of two strings.",
+   "test_cases": [
+    {
+     "args": [
+      "hello",
+      "world"
+     ],
+     "expected": 10
+    },
+    {
+     "args": [
+      "",
+      ""
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "a",
+      "bc"
+     ],
+     "expected": 3
+    },
+    {
+     "args": [
+      "test",
+      ""
+     ],
+     "expected": 4
+    },
+    {
+     "args": [
+      "",
+      "xyz"
+     ],
+     "expected": 3
+    }
+   ]
+  },
+  {
+   "id": "VB-T2-015",
+   "tier": 2,
+   "title": "Is Longer Than",
+   "description_neutral": "Check if a string's length is strictly greater than a given threshold.",
+   "test_cases": [
+    {
+     "args": [
+      "hello",
+      3
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      "hi",
+      5
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "",
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "test",
+      4
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      "test",
+      3
+     ],
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-001",
+   "tier": 3,
+   "title": "List Length",
+   "description_neutral": "Define a linked list type with nil and cons constructors, then write a function that computes its length.",
+   "test_cases": [
+    {
+     "args": [
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       42
+      ]
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      [
+       1,
+       2,
+       3
+      ]
+     ],
+     "expected": 3
+    },
+    {
+     "args": [
+      [
+       -1,
+       -2,
+       -3,
+       -4,
+       -5
+      ]
+     ],
+     "expected": 5
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-002",
+   "tier": 3,
+   "title": "Tree Depth",
+   "description_neutral": "Define a binary tree type with leaf and branch constructors, then write a function that computes the depth. A leaf has depth 1.",
+   "test_cases": [
+    {
+     "args": [
+      {
+       "Leaf": [
+        5
+       ]
+      }
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      {
+       "Branch": [
+        {
+         "Leaf": [
+          1
+         ]
+        },
+        {
+         "Leaf": [
+          2
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": 2
+    },
+    {
+     "args": [
+      {
+       "Branch": [
+        {
+         "Branch": [
+          {
+           "Leaf": [
+            1
+           ]
+          },
+          {
+           "Leaf": [
+            2
+           ]
+          }
+         ]
+        },
+        {
+         "Leaf": [
+          3
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": 3
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-003",
+   "tier": 3,
+   "title": "Expression Evaluator",
+   "description_neutral": "Define an expression type with literal, addition, and negation constructors. Write a function that evaluates the expression to an integer.",
+   "test_cases": [
+    {
+     "args": [
+      {
+       "Lit": [
+        42
+       ]
+      }
+     ],
+     "expected": 42
+    },
+    {
+     "args": [
+      {
+       "Add": [
+        {
+         "Lit": [
+          2
+         ]
+        },
+        {
+         "Lit": [
+          3
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      {
+       "Neg": [
+        {
+         "Lit": [
+          7
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": -7
+    },
+    {
+     "args": [
+      {
+       "Add": [
+        {
+         "Neg": [
+          {
+           "Lit": [
+            4
+           ]
+          }
+         ]
+        },
+        {
+         "Lit": [
+          10
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": 6
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-004",
+   "tier": 3,
+   "title": "List Sum",
+   "description_neutral": "Define a linked list type with nil and cons constructors, then write a function that sums all elements.",
+   "test_cases": [
+    {
+     "args": [
+      []
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       7
+      ]
+     ],
+     "expected": 7
+    },
+    {
+     "args": [
+      [
+       1,
+       2,
+       3
+      ]
+     ],
+     "expected": 6
+    },
+    {
+     "args": [
+      [
+       10,
+       -3,
+       -7
+      ]
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-005",
+   "tier": 3,
+   "title": "Tree Sum",
+   "description_neutral": "Define a binary tree type with leaf and branch constructors, then write a function that sums all leaf values.",
+   "test_cases": [
+    {
+     "args": [
+      {
+       "Leaf": [
+        5
+       ]
+      }
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      {
+       "Branch": [
+        {
+         "Leaf": [
+          1
+         ]
+        },
+        {
+         "Leaf": [
+          2
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": 3
+    },
+    {
+     "args": [
+      {
+       "Branch": [
+        {
+         "Branch": [
+          {
+           "Leaf": [
+            4
+           ]
+          },
+          {
+           "Leaf": [
+            -4
+           ]
+          }
+         ]
+        },
+        {
+         "Leaf": [
+          9
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": 9
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-006",
+   "tier": 3,
+   "title": "Option Unwrap Or",
+   "description_neutral": "Define an option type with none and some constructors. Write a function that unwraps the option, returning the contained value or a default integer.",
+   "test_cases": [
+    {
+     "args": [
+      {
+       "Some": [
+        5
+       ]
+      },
+      0
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      {
+       "None": []
+      },
+      99
+     ],
+     "expected": 99
+    },
+    {
+     "args": [
+      {
+       "Some": [
+        -3
+       ]
+      },
+      7
+     ],
+     "expected": -3
+    },
+    {
+     "args": [
+      {
+       "None": []
+      },
+      -1
+     ],
+     "expected": -1
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-007",
+   "tier": 3,
+   "title": "List Contains",
+   "description_neutral": "Define a linked list type with nil and cons constructors. Write a function that returns true if the list contains a given target integer.",
+   "test_cases": [
+    {
+     "args": [
+      [],
+      1
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       1,
+       2,
+       3
+      ],
+      2
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      [
+       1,
+       2,
+       3
+      ],
+      9
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      [
+       5
+      ],
+      5
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      [
+       -4,
+       0,
+       4
+      ],
+      -4
+     ],
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-008",
+   "tier": 3,
+   "title": "Tree Count Leaves",
+   "description_neutral": "Define a binary tree type with leaf and branch constructors. Write a function that counts the number of leaf nodes. The result is always at least 1 (every tree has at least one leaf).",
+   "test_cases": [
+    {
+     "args": [
+      {
+       "Leaf": [
+        5
+       ]
+      }
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      {
+       "Branch": [
+        {
+         "Leaf": [
+          1
+         ]
+        },
+        {
+         "Leaf": [
+          2
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": 2
+    },
+    {
+     "args": [
+      {
+       "Branch": [
+        {
+         "Branch": [
+          {
+           "Leaf": [
+            1
+           ]
+          },
+          {
+           "Leaf": [
+            2
+           ]
+          }
+         ]
+        },
+        {
+         "Leaf": [
+          3
+         ]
+        }
+       ]
+      }
+     ],
+     "expected": 3
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-009",
+   "tier": 3,
+   "title": "List Append",
+   "description_neutral": "Define a linked list type with nil and cons constructors. Write a function that concatenates two lists.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       1,
+       2
+      ],
+      [
+       3
+      ]
+     ],
+     "expected": [
+      1,
+      2,
+      3
+     ]
+    },
+    {
+     "args": [
+      [],
+      []
+     ],
+     "expected": []
+    },
+    {
+     "args": [
+      [
+       1
+      ],
+      []
+     ],
+     "expected": [
+      1
+     ]
+    },
+    {
+     "args": [
+      [],
+      [
+       5,
+       6
+      ]
+     ],
+     "expected": [
+      5,
+      6
+     ]
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-010",
+   "tier": 3,
+   "title": "List Last",
+   "description_neutral": "Define a linked list type and an option type. Write a function that returns the last element of the list, or none if the list is empty.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       1,
+       2,
+       3
+      ]
+     ],
+     "expected": {
+      "Some": [
+       3
+      ]
+     }
+    },
+    {
+     "args": [
+      []
+     ],
+     "expected": {
+      "None": []
+     }
+    },
+    {
+     "args": [
+      [
+       7
+      ]
+     ],
+     "expected": {
+      "Some": [
+       7
+      ]
+     }
+    },
+    {
+     "args": [
+      [
+       -1,
+       -9
+      ]
+     ],
+     "expected": {
+      "Some": [
+       -9
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-011",
+   "tier": 3,
+   "title": "Safe Divide",
+   "description_neutral": "Perform integer division, returning the quotient if the divisor is non-zero, or -1 if division by zero. Internally, represent the outcome as an algebraic data type with success and failure variants, and use pattern matching to extract the result.",
+   "test_cases": [
+    {
+     "args": [
+      10,
+      2
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      7,
+      3
+     ],
+     "expected": 2
+    },
+    {
+     "args": [
+      10,
+      0
+     ],
+     "expected": -1
+    },
+    {
+     "args": [
+      0,
+      5
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      -6,
+      3
+     ],
+     "expected": -2
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-012",
+   "tier": 3,
+   "title": "Pair Sum",
+   "description_neutral": "Construct a pair from two integers, then use pattern matching to extract both components and return their sum.",
+   "test_cases": [
+    {
+     "args": [
+      3,
+      4
+     ],
+     "expected": 7
+    },
+    {
+     "args": [
+      0,
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      -5,
+      5
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      10,
+      -3
+     ],
+     "expected": 7
+    },
+    {
+     "args": [
+      100,
+      200
+     ],
+     "expected": 300
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-013",
+   "tier": 3,
+   "title": "Classify Sign",
+   "description_neutral": "Classify an integer by its sign using an algebraic data type with three variants (Negative, Zero, Positive). Construct the appropriate variant, then use pattern matching to return -1 for negative, 0 for zero, and 1 for positive.",
+   "test_cases": [
+    {
+     "args": [
+      42
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      -7
+     ],
+     "expected": -1
+    },
+    {
+     "args": [
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      1
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      -100
+     ],
+     "expected": -1
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-014",
+   "tier": 3,
+   "title": "Color to RGB Code",
+   "description_neutral": "Map an integer code (0=Red, 1=Green, 2=Blue, anything else=Black) to an RGB integer value using an algebraic data type. Construct the appropriate color variant, then pattern match to return: Red=16711680, Green=65280, Blue=255, Black=0.",
+   "test_cases": [
+    {
+     "args": [
+      0
+     ],
+     "expected": 16711680
+    },
+    {
+     "args": [
+      1
+     ],
+     "expected": 65280
+    },
+    {
+     "args": [
+      2
+     ],
+     "expected": 255
+    },
+    {
+     "args": [
+      3
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      -1
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T3-015",
+   "tier": 3,
+   "title": "Either Select",
+   "description_neutral": "Given three integers (a, b, selector), if selector > 0 wrap the first value in a Left variant, otherwise wrap the second value in a Right variant. Use pattern matching on the result to extract and return the contained integer.",
+   "test_cases": [
+    {
+     "args": [
+      10,
+      20,
+      1
+     ],
+     "expected": 10
+    },
+    {
+     "args": [
+      10,
+      20,
+      0
+     ],
+     "expected": 20
+    },
+    {
+     "args": [
+      10,
+      20,
+      -5
+     ],
+     "expected": 20
+    },
+    {
+     "args": [
+      42,
+      99,
+      100
+     ],
+     "expected": 42
+    },
+    {
+     "args": [
+      0,
+      0,
+      1
+     ],
+     "expected": 0
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-001",
+   "tier": 4,
+   "title": "Fibonacci",
+   "description_neutral": "Compute the nth Fibonacci number. fib(0) = 0, fib(1) = 1, fib(n) = fib(n-1) + fib(n-2).",
+   "test_cases": [
+    {
+     "args": [
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      1
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      5
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      10
+     ],
+     "expected": 55
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-002",
+   "tier": 4,
+   "title": "Greatest Common Divisor",
+   "description_neutral": "Compute the GCD of two non-negative integers using Euclid's algorithm: gcd(a, 0) = a, gcd(a, b) = gcd(b, a mod b).",
+   "test_cases": [
+    {
+     "args": [
+      12,
+      8
+     ],
+     "expected": 4
+    },
+    {
+     "args": [
+      7,
+      0
+     ],
+     "expected": 7
+    },
+    {
+     "args": [
+      0,
+      5
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      100,
+      75
+     ],
+     "expected": 25
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-003",
+   "tier": 4,
+   "title": "Even/Odd (Mutual Recursion)",
+   "description_neutral": "Determine if a non-negative integer is even using mutual recursion with an is_odd helper. is_even(0) = true, is_even(n) = is_odd(n-1). is_odd(0) = false, is_odd(n) = is_even(n-1).",
+   "test_cases": [
+    {
+     "args": [
+      0
+     ],
+     "expected": "true"
+    },
+    {
+     "args": [
+      1
+     ],
+     "expected": "false"
+    },
+    {
+     "args": [
+      4
+     ],
+     "expected": "true"
+    },
+    {
+     "args": [
+      7
+     ],
+     "expected": "false"
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-004",
+   "tier": 4,
+   "title": "Power",
+   "description_neutral": "Compute base raised to the power of exponent using repeated multiplication. power(base, 0) = 1, power(base, exp) = base * power(base, exp-1).",
+   "test_cases": [
+    {
+     "args": [
+      2,
+      10
+     ],
+     "expected": 1024
+    },
+    {
+     "args": [
+      3,
+      0
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      5,
+      1
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      2,
+      0
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      1,
+      100
+     ],
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-005",
+   "tier": 4,
+   "title": "Sum to N",
+   "description_neutral": "Compute the sum 0 + 1 + 2 + ... + n using recursion.",
+   "test_cases": [
+    {
+     "args": [
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      1
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      5
+     ],
+     "expected": 15
+    },
+    {
+     "args": [
+      10
+     ],
+     "expected": 55
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-006",
+   "tier": 4,
+   "title": "List Reverse",
+   "description_neutral": "Define a linked list type with nil and cons constructors. Write a function that reverses the list using an accumulator pattern.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       1,
+       2,
+       3
+      ]
+     ],
+     "expected": [
+      3,
+      2,
+      1
+     ]
+    },
+    {
+     "args": [
+      []
+     ],
+     "expected": []
+    },
+    {
+     "args": [
+      [
+       7
+      ]
+     ],
+     "expected": [
+      7
+     ]
+    },
+    {
+     "args": [
+      [
+       1,
+       -2
+      ]
+     ],
+     "expected": [
+      -2,
+      1
+     ]
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-007",
+   "tier": 4,
+   "title": "Count Digits",
+   "description_neutral": "Count the number of decimal digits in a non-negative integer. The number 0 has 1 digit.",
+   "test_cases": [
+    {
+     "args": [
+      0
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      9
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      42
+     ],
+     "expected": 2
+    },
+    {
+     "args": [
+      12345
+     ],
+     "expected": 5
+    },
+    {
+     "args": [
+      1000000
+     ],
+     "expected": 7
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-008",
+   "tier": 4,
+   "title": "Multiply",
+   "description_neutral": "Multiply two non-negative integers using repeated addition. multiply(a, 0) = 0, multiply(a, b) = a + multiply(a, b-1).",
+   "test_cases": [
+    {
+     "args": [
+      7,
+      6
+     ],
+     "expected": 42
+    },
+    {
+     "args": [
+      0,
+      5
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      3,
+      0
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      1,
+      1
+     ],
+     "expected": 1
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-009",
+   "tier": 4,
+   "title": "List Nth",
+   "description_neutral": "Define a linked list type with nil and cons constructors. Write a function that returns the nth element (0-indexed), or -1 if the index is out of bounds.",
+   "test_cases": [
+    {
+     "args": [
+      [
+       10,
+       20,
+       30
+      ],
+      0
+     ],
+     "expected": 10
+    },
+    {
+     "args": [
+      [
+       10,
+       20,
+       30
+      ],
+      2
+     ],
+     "expected": 30
+    },
+    {
+     "args": [
+      [
+       10,
+       20,
+       30
+      ],
+      3
+     ],
+     "expected": -1
+    },
+    {
+     "args": [
+      [],
+      0
+     ],
+     "expected": -1
+    }
+   ]
+  },
+  {
+   "id": "VB-T4-010",
+   "tier": 4,
+   "title": "Natural Division",
+   "description_neutral": "Compute integer division via repeated subtraction. div_natural(a, b) counts how many times b can be subtracted from a. Precondition: b > 0.",
+   "test_cases": [
+    {
+     "args": [
+      17,
+      5
+     ],
+     "expected": 3
+    },
+    {
+     "args": [
+      10,
+      3
+     ],
+     "expected": 3
+    },
+    {
+     "args": [
+      0,
+      1
+     ],
+     "expected": 0
+    },
+    {
+     "args": [
+      7,
+      7
+     ],
+     "expected": 1
+    },
+    {
+     "args": [
+      3,
+      10
+     ],
+     "expected": 0
+    }
+   ]
+  }
+ ]
+}

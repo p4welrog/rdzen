@@ -1,0 +1,37 @@
+spec fn evens(xs: Array<Int>, n: Nat) -> Nat
+    decreases n
+=
+    if n == 0 || n > xs.len {
+        0
+    } else {
+        evens(xs, n - 1) + (if xs[n - 1] % 2 == 0 { 1 } else { 0 })
+    }
+
+fn evens_first(xs: Array<Int>) -> Array<Int>
+    requires xs.len <= 1000
+    ensures result.len == xs.len
+{
+    var out: Array<Int> = []
+    var i = 0
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len && out.len == evens(xs, i) && out.len <= i
+        decreases xs.len - i
+    {
+        if xs[i] % 2 == 0 {
+            push(&out, xs[i])
+        }
+        i = i + 1
+    }
+    let ne = out.len
+    i = 0
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len && out.len == ne + i - evens(xs, i) && evens(xs, i) <= i
+        decreases xs.len - i
+    {
+        if xs[i] % 2 != 0 {
+            push(&out, xs[i])
+        }
+        i = i + 1
+    }
+    out
+}

@@ -1,0 +1,9 @@
+```python
+def floor_average(xs: list[int]) -> int:
+    return int(sum(xs) / len(xs))
+
+
+def test_avg():
+    assert floor_average([1, 2]) == 1
+    assert floor_average([4]) == 4
+```

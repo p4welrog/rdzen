@@ -1,0 +1,43 @@
+fn next_permutation(xs: Array<Int>) -> Array<Int>
+    requires xs.len <= 100
+    ensures result.len == xs.len
+{
+    var a = xs
+    if a.len < 2 {
+        return a
+    }
+    var i = a.len - 2
+    while i >= 0 && a[i] >= a[i + 1]
+        invariant -1 <= i && i <= a.len - 2 && a.len == xs.len
+        decreases i + 1
+    {
+        i = i - 1
+    }
+    if i >= 0 {
+        var j = a.len - 1
+        while a[j] <= a[i]
+            invariant i < j && j < a.len && a.len == xs.len
+            invariant a[i] < a[i + 1]
+            invariant forall k in j + 1..a.len: a[k] <= a[i]
+            decreases j
+        {
+            j = j - 1
+        }
+        let t = a[i]
+        a[i] = a[j]
+        a[j] = t
+    }
+    var lo = i + 1
+    var hi = a.len - 1
+    while lo < hi
+        invariant 0 <= lo && hi < a.len && a.len == xs.len && lo <= hi + 1
+        decreases hi - lo
+    {
+        let t = a[lo]
+        a[lo] = a[hi]
+        a[hi] = t
+        lo = lo + 1
+        hi = hi - 1
+    }
+    a
+}

@@ -1,0 +1,31 @@
+fn gcd(a: Int, b: Int) -> Int
+    requires a >= 1 && b >= 0
+    ensures result >= 1
+    decreases b
+{
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
+}
+
+fn lcm_all(xs: Array<Nat>) -> Option<Nat>
+    requires forall k in 0..xs.len: xs[k] >= 1
+{
+    var acc = 1
+    for x in xs
+        invariant acc >= 1
+    {
+        let g = gcd(acc, x)
+        match checked_mul(acc / g, x) {
+            Some(v) => if v >= 1 {
+                acc = v
+            } else {
+                return None
+            },
+            None => { return None },
+        }
+    }
+    Some(acc)
+}

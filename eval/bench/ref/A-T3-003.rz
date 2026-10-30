@@ -1,0 +1,27 @@
+data Expr { Lit(value: Int), Add(left: Expr, right: Expr), Neg(inner: Expr) }
+
+spec fn size(e: Expr) -> Nat
+    decreases e
+=
+    match e { Lit(_) => 1, Add(l, r) => 1 + size(l) + size(r), Neg(x) => 1 + size(x) }
+
+spec fn small(e: Expr) -> Bool
+    decreases e
+=
+    match e {
+        Lit(v) => -1000 <= v && v <= 1000,
+        Add(l, r) => small(l) && small(r),
+        Neg(x) => small(x),
+    }
+
+fn eval_expr(e: Expr) -> Int
+    requires small(e) && size(e) <= 200
+    ensures -1000 * size(e) <= result && result <= 1000 * size(e)
+    decreases e
+{
+    match e {
+        Lit(v) => v,
+        Add(l, r) => eval_expr(l) + eval_expr(r),
+        Neg(x) => -eval_expr(x),
+    }
+}

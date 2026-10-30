@@ -1,0 +1,10 @@
+fn absolute_value(x: Int) -> Nat
+    requires -1000000000 <= x && x <= 1000000000
+    ensures result == x || result == -x
+{
+    if x < 0 {
+        -x
+    } else {
+        x
+    }
+}

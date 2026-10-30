@@ -1,0 +1,16 @@
+fn filter_positives(xs: Array<Int>) -> Array<Int>
+    requires xs.len <= 1000
+    ensures forall k in 0..result.len: result[k] > 0
+    ensures result.len <= xs.len
+{
+    var out: Array<Int> = []
+    for x in xs
+        invariant out.len <= it
+        invariant forall k in 0..out.len: out[k] > 0
+    {
+        if x > 0 {
+            push(&out, x)
+        }
+    }
+    out
+}

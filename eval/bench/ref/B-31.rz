@@ -1,0 +1,32 @@
+data Tree { Leaf, Node(left: Tree, key: Int, right: Tree) }
+
+spec fn within(t: Tree, lo: Option<Int>, hi: Option<Int>) -> Bool
+    decreases t
+=
+    match t {
+        Leaf => true,
+        Node(l, k, r) => (match lo { Some(a) => a < k, None => true }) &&
+            (match hi { Some(b) => k < b, None => true }) &&
+            within(l, lo, Some(k)) &&
+            within(r, Some(k), hi),
+    }
+
+fn check(t: Tree, lo: Option<Int>, hi: Option<Int>) -> Bool
+    ensures result == within(t, lo, hi)
+    decreases t
+{
+    match t {
+        Leaf => true,
+        Node(l, k, r) => {
+            let ok_lo = match lo { Some(a) => a < k, None => true }
+            let ok_hi = match hi { Some(b) => k < b, None => true }
+            ok_lo && ok_hi && check(l, lo, Some(k)) && check(r, Some(k), hi)
+        },
+    }
+}
+
+fn is_bst(t: Tree) -> Bool
+    ensures result == within(t, None, None)
+{
+    check(t, None, None)
+}

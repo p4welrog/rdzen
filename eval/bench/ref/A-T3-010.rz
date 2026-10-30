@@ -1,0 +1,17 @@
+data IntList { Nil, Cons(head: Int, tail: IntList) }
+
+spec fn last(xs: IntList) -> Option<Int>
+    decreases xs
+=
+    match xs { Nil => None, Cons(h, Nil) => Some(h), Cons(_, t) => last(t) }
+
+fn list_last(xs: IntList) -> Option<Int>
+    ensures result == last(xs)
+    decreases xs
+{
+    match xs {
+        Nil => None,
+        Cons(h, Nil) => Some(h),
+        Cons(_, t) => list_last(t),
+    }
+}

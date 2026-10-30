@@ -1,0 +1,6 @@
+fn combined_length(a: Str, b: Str) -> Nat
+    requires a.len <= 100 && b.len <= 100
+    ensures result == a.len + b.len
+{
+    a.len + b.len
+}

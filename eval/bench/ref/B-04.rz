@@ -1,0 +1,10 @@
+fn rotate_left(xs: Array<Int>, k: Nat) -> Array<Int>
+    ensures result.len == xs.len
+    ensures forall i in 0..xs.len: result[i] == xs[(i + k) % xs.len]
+{
+    if xs.len == 0 {
+        return xs
+    }
+    let s = k % xs.len
+    concat(slice(xs, s, xs.len), slice(xs, 0, s))
+}

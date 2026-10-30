@@ -1,0 +1,16 @@
+data IntList { Nil, Cons(head: Int, tail: IntList) }
+
+spec fn mem(xs: IntList, x: Int) -> Bool
+    decreases xs
+=
+    match xs { Nil => false, Cons(h, t) => h == x || mem(t, x) }
+
+fn list_contains(xs: IntList, target: Int) -> Bool
+    ensures result == mem(xs, target)
+    decreases xs
+{
+    match xs {
+        Nil => false,
+        Cons(h, t) => h == target || list_contains(t, target),
+    }
+}

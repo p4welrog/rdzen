@@ -1,0 +1,28 @@
+data Tree { Leaf(value: Int), Branch(left: Tree, right: Tree) }
+
+spec fn size(t: Tree) -> Nat
+    decreases t
+=
+    match t { Leaf(_) => 1, Branch(l, r) => 1 + size(l) + size(r) }
+
+spec fn small(t: Tree) -> Bool
+    decreases t
+=
+    match t { Leaf(v) => -1000 <= v && v <= 1000, Branch(l, r) => small(l) && small(r) }
+
+spec fn leaf_sum(t: Tree) -> Int
+    decreases t
+=
+    match t { Leaf(v) => v, Branch(l, r) => leaf_sum(l) + leaf_sum(r) }
+
+fn tree_sum(t: Tree) -> Int
+    requires small(t) && size(t) <= 1000
+    ensures result == leaf_sum(t)
+    ensures -1000 * size(t) <= result && result <= 1000 * size(t)
+    decreases t
+{
+    match t {
+        Leaf(v) => v,
+        Branch(l, r) => tree_sum(l) + tree_sum(r),
+    }
+}

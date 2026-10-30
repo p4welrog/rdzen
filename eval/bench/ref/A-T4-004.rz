@@ -1,0 +1,17 @@
+spec fn pw(b: Int, e: Nat) -> Int
+    decreases e
+=
+    if e == 0 { 1 } else { b * pw(b, e - 1) }
+
+fn power(base: Nat, exp: Nat) -> Nat
+    requires base <= 10 && exp <= 100
+    requires pw(base, exp) <= 1000000000000000000
+    ensures result == pw(base, exp)
+    decreases exp
+{
+    if exp == 0 {
+        1
+    } else {
+        base * power(base, exp - 1)
+    }
+}

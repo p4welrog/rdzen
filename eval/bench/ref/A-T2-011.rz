@@ -1,0 +1,19 @@
+fn starts_with_prefix(s: Str, prefix: Str) -> Bool
+    ensures result == (prefix.len <= s.len && forall k in 0..prefix.len: s[k] == prefix[k])
+{
+    if prefix.len > s.len {
+        return false
+    }
+    var i = 0
+    while i < prefix.len
+        invariant 0 <= i && i <= prefix.len
+        invariant forall k in 0..i: s[k] == prefix[k]
+        decreases prefix.len - i
+    {
+        if s[i] != prefix[i] {
+            return false
+        }
+        i = i + 1
+    }
+    true
+}

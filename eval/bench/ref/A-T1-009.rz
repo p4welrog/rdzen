@@ -1,0 +1,6 @@
+fn max_of_three(a: Int, b: Int, c: Int) -> Int
+    ensures result >= a && result >= b && result >= c
+    ensures result == a || result == b || result == c
+{
+    max(a, max(b, c))
+}

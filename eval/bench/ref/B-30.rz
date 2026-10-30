@@ -1,0 +1,28 @@
+fn lis_length(xs: Array<Int>) -> Nat
+    requires xs.len <= 200
+    ensures result <= xs.len
+{
+    var best = filled(xs.len, 1)
+    var res = 0
+    var i = 0
+    while i < xs.len
+        invariant 0 <= i && i <= xs.len && best.len == xs.len && 0 <= res && res <= i
+        invariant forall k in 0..xs.len: 1 <= best[k] && best[k] <= k + 1
+        decreases xs.len - i
+    {
+        var j = 0
+        while j < i
+            invariant 0 <= j && j <= i && best.len == xs.len
+            invariant forall k in 0..xs.len: 1 <= best[k] && best[k] <= k + 1
+            decreases i - j
+        {
+            if xs[j] < xs[i] && best[j] + 1 > best[i] {
+                best[i] = best[j] + 1
+            }
+            j = j + 1
+        }
+        res = max(res, best[i])
+        i = i + 1
+    }
+    res
+}

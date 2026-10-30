@@ -1,0 +1,19 @@
+fn isqrt(n: Nat) -> Nat
+    ensures result * result <= n && n < (result + 1) * (result + 1)
+{
+    var lo = 0
+    var hi = 3037000500
+    while hi - lo > 1
+        invariant 0 <= lo && lo < hi && hi <= 3037000500
+        invariant lo * lo <= n && n < hi * hi
+        decreases hi - lo
+    {
+        let mid = lo + (hi - lo) / 2
+        if mid * mid <= n {
+            lo = mid
+        } else {
+            hi = mid
+        }
+    }
+    lo
+}

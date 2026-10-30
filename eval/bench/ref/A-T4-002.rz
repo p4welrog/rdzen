@@ -1,0 +1,10 @@
+fn gcd(a: Nat, b: Nat) -> Nat
+    ensures b != 0 || result == a
+    decreases b
+{
+    if b == 0 {
+        a
+    } else {
+        gcd(b, a % b)
+    }
+}

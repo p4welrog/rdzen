@@ -1,0 +1,8 @@
+fn saturating_add(a: Int, b: Int) -> Int
+    ensures result == (if a + b > int_max { int_max } else { if a + b < int_min { int_min } else { a + b } })
+{
+    match checked_add(a, b) {
+        Some(v) => v,
+        None => if a > 0 { int_max } else { int_min },
+    }
+}

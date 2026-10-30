@@ -1,0 +1,10 @@
+data Pair { Pair(first: Int, second: Int) }
+
+fn pair_sum(a: Int, b: Int) -> Int
+    requires -1000000000 <= a && a <= 1000000000 && -1000000000 <= b && b <= 1000000000
+    ensures result == a + b
+{
+    match Pair(a, b) {
+        Pair(x, y) => x + y,
+    }
+}

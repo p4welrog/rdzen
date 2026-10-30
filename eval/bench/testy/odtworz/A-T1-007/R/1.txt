@@ -1,0 +1,7 @@
+```rdzen
+fn safe_modulo(a: Int, b: Int) -> Int
+    ensures result == a % b
+{
+    a % b
+}
+```
