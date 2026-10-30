@@ -12,7 +12,7 @@ udowodnione, 0 sprawdzeń dynamicznych w kodzie C.
 
 | Część | Funkcje | Co jest udowodnione |
 |---|---|---|
-| Budowa drzewa | `huffman_tree`, `merge_step`, `reassign`, `two_min` | korzeń jest węzłem; każdy symbol 0..n−1 jest w drzewie; wysokość ≤ n; brak przepełnień (niezmiennik sumy wag); każdy krok scala dwa drzewa o najmniejszych wagach |
+| Budowa drzewa | `huffman_tree`, `merge_step`, `reassign`, `two_min` | korzeń jest węzłem; każdy symbol 0..n−1 jest w drzewie; wysokość ≤ n; brak przepełnień (niezmiennik sumy wag); `two_min` zwraca dwa indeksy o najmniejszych wagach (ta własność nie przechodzi do kontraktu `merge_step` ani `huffman_tree` — zgodność z algorytmem Huffmana wynika z lektury kodu, nie z twierdzenia) |
 | Kodowanie | `make_codes`, `emit_path`, `encode` | każdy kod to ścieżka korzeń → liść symbolu; segmenty bitów odpowiadają kolejnym symbolom |
 | Dekodowanie | `dec_one`, `decode` | wynik to dokładnie łańcuch dekodera zachłannego (z informacją o błędzie) |
 | Twierdzenie | `decode_correct`, `huffman_roundtrip` | jeśli bity mają podział na ścieżki symboli `msg`, dekoder zwraca `ok` i dokładnie `msg` (jednoznaczna dekodowalność kodu prefiksowego); `huffman_roundtrip(freqs, msg) == msg` |

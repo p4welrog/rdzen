@@ -49,6 +49,8 @@ def runtime_names(f, unproved, need):
 
 
 def erasable_let(s, rt_names) -> bool:
-    """`let x = y` (kopia zmiennej, bez adnotacji typu), gdy `x` nie jest czytane w czasie wykonania."""
-    return (isinstance(s, Let) and s.type is None and isinstance(s.expr, Name) and
+    """`let x = y` (kopia zmiennej, bez adnotacji typu), gdy `x` nie jest czytane w czasie wykonania.
+    Tylko `let`: zmienna `var` może być potem zapisywana (`x = …`, `x[i] = …`), a zapis wymaga
+    istniejącej zmiennej w kodzie wynikowym."""
+    return (isinstance(s, Let) and not s.mutable and s.type is None and isinstance(s.expr, Name) and
             rt_names is not None and s.name not in rt_names)

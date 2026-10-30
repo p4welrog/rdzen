@@ -1,0 +1,11 @@
+// expect: ok
+// Regresja: zmienne var zapisywane, lecz nieczytane, nie są wymazywane przez analizę widmową.
+fn f(xs: Array<Int>) -> Int
+    requires xs.len > 0
+{
+    var y = xs
+    y[0] = 5
+    var z = xs
+    z = []
+    1
+}

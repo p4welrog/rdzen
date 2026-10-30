@@ -5,7 +5,7 @@ w pamięci — co zmieniało przebieg Z3 i dawało raz `proved`, raz `unknown` d
 import os, sys, subprocess, tempfile, filecmp
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-FILES = [os.path.join(ROOT, "examples", f) for f in ("bst.rz", "sort.rz", "hof.rz")]
+FILES = [os.path.join(ROOT, "examples", f) for f in ("bst.rz", "sort.rz", "hof.rz")] + [os.path.join(ROOT, "tests", "cases", "rec_list_ok.rz")]
 
 
 def run(path, seed, dump):

@@ -104,7 +104,7 @@ def merge(pairs):
     for s, _ in pairs[1:]:
         keys &= set(s.env)
     env = {}
-    for k in keys:
+    for k in sorted(keys):          # kolejność tworzenia termów nie może zależeć od PYTHONHASHSEED
         vals = [s.env[k] for s, _ in pairs]
         if all(v.eq(vals[0]) for v in vals[1:]):
             env[k] = vals[0]

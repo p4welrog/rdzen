@@ -470,8 +470,8 @@ def run_example(f, ex, ch, src):
         except Violation as viol:
             return Diagnostic("E4300", "error", ex.span, "przykład narusza kontrakt podczas obliczania", ["4.5"],
                               notes=[f"naruszenie `{viol.kind}` w wierszu {viol.span.line}" + (f": {viol.detail}" if viol.detail else "")])
-        except BudgetExceeded:
-            return Diagnostic("W4301", "warning", ex.span, "przykład przekroczył budżet kroków", ["4.5"])
+        except (BudgetExceeded, RecursionError):
+            return Diagnostic("W4301", "warning", ex.span, "przykład przekroczył budżet kroków lub głębokość rekursji", ["4.5"])
         except HoleHit as h:
             return Diagnostic("I4302", "info", ex.span, f"przykład pominięty: program zawiera dziurę `?{h.name}`", ["4.5"])
         if v is True:
