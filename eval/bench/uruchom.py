@@ -4,13 +4,16 @@
   python3 eval/bench/uruchom.py --model NAZWA --warianty P,PT,R [--zestaw A|B|AB] [--zadania ID,…]
                                 [--proby 6] [--wyjscie eval/bench/wyniki/NAZWA_PRZEBIEGU]
                                 [--backend anthropic|polecenie|odtworz] [--polecenie "…"] [--odtworz KATALOG]
+                                [--powtorzenia N] [--bez-cache]
 
 Backendy modelu:
   anthropic  — Messages API (zmienna ANTHROPIC_API_KEY), bez zależności poza biblioteką standardową
   polecenie  — dowolny program: JSON {"model","system","messages"} na stdin, odpowiedź na stdout
   odtworz    — odpowiedzi z plików KATALOG/ID/WARIANT/N.txt (testy uprzęży, powtórna ocena)
 
-Wynik: KATALOG/wyniki.jsonl (jeden wiersz na zadanie×wariant) oraz pliki prób w KATALOG/ID/WARIANT/.
+Messages API: prompt systemowy i historia rozmowy idą z `cache_control` (prompt R ma ~6 tys. tokenów
+i jest wspólny dla wszystkich zadań); tokeny zapisu i odczytu cache są liczone osobno.
+Wynik: KATALOG/wyniki.jsonl (przy --powtorzenia N > 1: KATALOG/powt-K/wyniki.jsonl) (jeden wiersz na zadanie×wariant) oraz pliki prób w KATALOG/ID/WARIANT/.
 Model nie widzi testów ukrytych ani wyroczni — dostaje tylko prompt i informację z bramki."""
 from __future__ import annotations
 
@@ -44,8 +47,13 @@ class Model:
             wej = json.dumps({"model": self.a.model, "system": system, "messages": messages})
             p = subprocess.run(self.a.polecenie, shell=True, input=wej, capture_output=True, text=True, timeout=1800)
             return p.stdout, {}
-        body = json.dumps({"model": self.a.model, "max_tokens": self.a.max_tokens, "system": system,
-                           "messages": messages}).encode()
+        zap = {"model": self.a.model, "max_tokens": self.a.max_tokens, "system": system, "messages": messages}
+        if not self.a.bez_cache:
+            # stały prompt systemowy (w R: REFERENCE.md) oraz rosnąca historia rozmowy: punkt cache na
+            # prompcie systemowym i automatyczny punkt na końcu wiadomości (kolejna próba czyta prefiks)
+            zap["system"] = [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+            zap["cache_control"] = {"type": "ephemeral"}
+        body = json.dumps(zap).encode()
         req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=body, headers={
             "x-api-key": os.environ["ANTHROPIC_API_KEY"], "anthropic-version": "2023-06-01",
             "content-type": "application/json"})
@@ -68,7 +76,8 @@ def jedno(model, z, wariant, katalog, proby):
     ext = "rz" if wariant == "R" else "py"
     d = os.path.join(katalog, z.id, wariant)
     os.makedirs(d, exist_ok=True)
-    log = {"zadanie": z.id, "wariant": wariant, "proby": [], "tokeny_wej": 0, "tokeny_wyj": 0}
+    log = {"zadanie": z.id, "wariant": wariant, "proby": [], "tokeny_wej": 0, "tokeny_wyj": 0,
+           "tokeny_cache_zapis": 0, "tokeny_cache_odczyt": 0}
     t0 = time.time()
     plik = None
     maks = 1 if wariant == "P" else proby
@@ -80,6 +89,8 @@ def jedno(model, z, wariant, katalog, proby):
             break
         log["tokeny_wej"] += usage.get("input_tokens", 0)
         log["tokeny_wyj"] += usage.get("output_tokens", 0)
+        log["tokeny_cache_zapis"] += usage.get("cache_creation_input_tokens", 0) or 0
+        log["tokeny_cache_odczyt"] += usage.get("cache_read_input_tokens", 0) or 0
         open(os.path.join(d, f"{n}.txt"), "w", encoding="utf-8").write(odp)
         plik = os.path.join(d, f"{n}.{ext}")
         open(plik, "w", encoding="utf-8").write(prompty.wyciagnij_kod(odp))
@@ -120,6 +131,9 @@ def main():
     ap.add_argument("--polecenie", default="")
     ap.add_argument("--odtworz", default="")
     ap.add_argument("--wyjscie", default="")
+    ap.add_argument("--powtorzenia", type=int, default=1,
+                    help="liczba niezależnych przebiegów; przy N > 1 wyniki w KATALOG/powt-1 … powt-N")
+    ap.add_argument("--bez-cache", dest="bez_cache", action="store_true", help="bez cache promptu (Messages API)")
     a = ap.parse_args()
     zs = [z for z in wszystkie().values() if z.id[0] in a.zestaw]
     if a.zadania:
@@ -129,9 +143,17 @@ def main():
     os.makedirs(kat, exist_ok=True)
     commit = subprocess.run(["git", "-C", TU, "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
     meta = {"model": a.model, "backend": a.backend, "warianty": a.warianty, "proby": a.proby, "commit": commit,
+            "powtorzenia": a.powtorzenia, "cache": not a.bez_cache,
             "start": time.strftime("%Y-%m-%dT%H:%M:%S"), "zadania": [z.id for z in zs]}
     json.dump(meta, open(os.path.join(kat, "meta.json"), "w"), ensure_ascii=False, indent=1)
     model = Model(a)
+    for k in range(1, a.powtorzenia + 1):
+        pk = kat if a.powtorzenia == 1 else os.path.join(kat, f"powt-{k}")
+        os.makedirs(pk, exist_ok=True)
+        przebieg(model, a, zs, pk, f"[{k}/{a.powtorzenia}] " if a.powtorzenia > 1 else "")
+
+
+def przebieg(model, a, zs, kat, przedrostek):
     gotowe = set()
     wyn = os.path.join(kat, "wyniki.jsonl")
     if os.path.exists(wyn):                      # wznowienie przerwanego przebiegu
@@ -146,11 +168,10 @@ def main():
                 r = jedno(model, z, w, kat, a.proby)
                 out.write(json.dumps(r, ensure_ascii=False) + "\n")
                 out.flush()
-                print(f"{z.id:9} {w:2}  iter {r['iteracje']}  "
+                print(f"{przedrostek}{z.id:9} {w:2}  iter {r['iteracje']}  "
                       f"{'zaakc.' if r.get('zaakceptowane') else 'odrzuc.'}  "
                       f"{'POPRAWNE' if r.get('poprawne') else 'błędne'}"
                       f"{'  BŁĄD NIEWYKRYTY' if r.get('blad_niewykryty') else ''}", flush=True)
-
 
 if __name__ == "__main__":
     main()

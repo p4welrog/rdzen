@@ -100,10 +100,11 @@ Poza mechanizacją pozostają: funkcje wyższego rzędu, typy danych, tablice, `
 1. **Ewaluacja — materiały gotowe (`eval/bench/`), brak przebiegów z modelami.**
    - Zadania: 82 = zestaw A (50 zadań VeraBench poziomów 1–4 z jawną dziedziną i podanymi typami danych) + zestaw B (32 nowe zadania pod błędy niewidoczne w kilku przykładach: przepełnienia, dzielenie obcinane a podłogowe, puste wejścia, duplikaty, wiele poprawnych odpowiedzi).
    - Do każdego zadania: wyrocznia, generator, przypadki brzegowe z maksymalnymi rozmiarami i wzorzec w Rdzeniu (`ref/`), który przechodzi `rzc check` i około 210 testów ukrytych.
-   - Warianty: P (Python, jedna odpowiedź), PT (Python z własnymi testami, do 6 prób), R (Rdzeń z `REFERENCE.md` i diagnostyką `rzc check`, do 6 prób).
+   - Warianty: P (Python, jedna odpowiedź), PT (Python z własnymi testami, do 6 prób), R (Rdzeń z `REFERENCE.md` i diagnostyką `rzc check`, do 6 prób). Messages API z cache promptu; `--powtorzenia N` (raport: średnia ± sd).
+   - Warianty agentowe (`agent.py`): AP (Claude Code pisze Pythona i może go testować) i AR (Claude Code ze skillem i `rzc`). Każde zadanie w świeżym kontenerze; na zewnątrz tylko `api.anthropic.com` przez pośrednika; `~/rdzen` bez `eval/`; audyt transkryptu. Decyzja: skill w kroku 1 klonuje repozytorium z `eval/bench`, więc w kontenerze `~/rdzen` jest gotowy, a sieć do GitHuba zablokowana.
    - Miary (`raport.py`): błędy niewykryte, poprawność, iteracje, czas, tokeny, pass@1 na przypadkach VeraBench, odsetek zobowiązań udowodnionych. `mutacje.py`: luki w kontraktach na próbce.
-   - Samotest (`eval/bench/samotest.py`, 17 kontroli, ~1 min) obejmuje kontrole negatywne oceniacza i pełną pętlę z odpowiedziami odtwarzanymi.
-   - Do zrobienia: przebiegi z modelami (backend Messages API albo dowolne polecenie), raport.
+   - Samotest (`eval/bench/samotest.py`, 23 kontrole, ~1 min) obejmuje kontrole negatywne oceniacza, pełną pętlę z odpowiedziami odtwarzanymi, powtórzenia, treść żądania z cache i ścieżkę agentową z atrapą agenta. Obrazy Dockera nie są budowane w samoteście.
+   - Do zrobienia: pierwsze zbudowanie obrazów (`agent.py obraz`) na komputerze z Dockerem; przebiegi z modelami; raport.
    - Zastrzeżenie: repozytorium jest publiczne, więc model nie może mieć do niego dostępu w trakcie przebiegu.
    - Porównanie projektowe z Verą: README, sekcja „Prace pokrewne”.
 2. **K1: zwalnianie pamięci w C.** Najpierw arena na wywołanie funkcji eksportowanej, później ewentualnie zliczanie referencji.

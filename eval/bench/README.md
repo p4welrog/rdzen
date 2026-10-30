@@ -59,6 +59,27 @@ Wspólne ustalenia:
 - Rozwiązanie w R jest testowane jako moduł Pythona z `rzc emit` z pozostawionymi sprawdzeniami
   dynamicznymi. Pułapka (`RdzenTrap`) to błąd.
 
+### Warianty agentowe (`agent.py`)
+
+Drugie pytanie: czy Rdzeń pomaga przy realistycznym użyciu. Agentem jest Claude Code w trybie nieinteraktywnym (`claude -p`) z narzędziami Bash, Read, Write, Edit, Glob i Grep. Każde zadanie działa w świeżym kontenerze.
+
+| Wariant | Agent | Akceptacja |
+|---|---|---|
+| AP | pisze Pythona, może go uruchamiać i testować | agent zostawił `/praca/rozwiazanie.py` |
+| AR | pisze Rdzeń ze skillem `rdzen-verified-code` | `/praca/rozwiazanie.rz` przechodzi `rzc check` (ta sama bramka co w R) |
+
+Izolacja:
+- Kontener jest tylko w sieci wewnętrznej `rz-wewn`. Na zewnątrz wychodzi wyłącznie przez pośrednika
+  `rz-proxy` (tinyproxy), który przepuszcza tylko `api.anthropic.com` (`agent/proxy/dozwolone`).
+- `HOME` agenta jest pusty: bez pamięci, ustawień i `CLAUDE.md`.
+- W AR montowane są tylko do odczytu `~/rdzen` (kopia bez `eval/` i `.git`) oraz skill. Krok 1 skilla
+  (`git clone`) jest więc pomijany, bo `~/rdzen/rzc` już istnieje.
+- Transkrypt (`stream-json`) jest zapisywany. Pole `audyt` zbiera wywołania narzędzi wspominające GitHub,
+  repozytorium, `eval/bench`, `curl`, `wget` lub `git clone`. Przebiegi z niepustym audytem trzeba obejrzeć.
+
+Miary są takie jak wyżej. `iteracje` to liczba tur agenta. Dochodzą koszt w USD (z wyniku `claude -p`)
+i liczba przebiegów z audytem.
+
 ## Miary (`raport.py`)
 
 Każda miara jest liczona na wariant i zestaw:
@@ -66,9 +87,11 @@ Każda miara jest liczona na wariant i zestaw:
 - zaakceptowane;
 - błędy niewykryte, względem wszystkich zadań i względem zaakceptowanych;
 - poprawne odrzucone przez bramkę;
-- średnia liczba iteracji, czas, tokeny wyjściowe;
+- średnia liczba iteracji, czas, tokeny wejściowe i wyjściowe, odsetek tokenów wejściowych z cache;
 - `pass1_verabench_A`;
 - tylko dla R: odsetek zobowiązań udowodnionych statycznie i średnia liczba sprawdzeń dynamicznych.
+
+Przy `--powtorzenia N` raport podaje średnią ± odchylenie standardowe po powtórzeniach.
 
 `mutacje.py` sprawdza siłę kontraktów na próbce poprawnych rozwiązań R. Mutuje ciała funkcji, kontraktów nie zmienia. Mutant, który przechodzi `rzc check`, a nie przechodzi testów ukrytych, to luka w kontrakcie. Miara: luki / (zabite + luki).
 
@@ -76,12 +99,18 @@ Każda miara jest liczona na wariant i zestaw:
 
 ```
 python3 eval/bench/samotest.py            # 82 wzorce, kontrole negatywne, pętla z odpowiedziami odtwarzanymi (~1 min)
-python3 eval/bench/uruchom.py --model claude-opus-5-5 --warianty P,PT,R          # ANTHROPIC_API_KEY
+python3 eval/bench/uruchom.py --model claude-opus-5-5 --warianty P,PT,R --powtorzenia 3   # ANTHROPIC_API_KEY
 python3 eval/bench/uruchom.py --model M --backend polecenie --polecenie "…"     # dowolny model przez stdin/stdout
 python3 eval/bench/raport.py eval/bench/wyniki/PRZEBIEG
 python3 eval/bench/mutacje.py eval/bench/wyniki/PRZEBIEG --proba 15
 python3 eval/bench/ocen.py ID PLIK.(py|rz)                                     # ocena pojedynczego rozwiązania
+
+python3 eval/bench/agent.py obraz                                              # raz: obrazy, sieć, pośrednik (Docker)
+python3 eval/bench/agent.py uruchom --model claude-opus-5-5 --powtorzenia 3 --budzet-usd 5
 ```
+
+W Messages API prompt systemowy i historia rozmowy idą z `cache_control`; `--bez-cache` to wyłącza.
+Prompt systemowy wariantu R jest wspólny dla wszystkich zadań, więc kolejne zapytania czytają go z cache.
 
 Przerwany przebieg wznawia się tym samym `--wyjscie`. `meta.json` zapisuje commit repozytorium, a więc
 wersję `REFERENCE.md` i kompilatora.
@@ -95,6 +124,9 @@ wersję `REFERENCE.md` i kompilatora.
   niewykryte na rozszerzonych testach, a nie przez pass@1.
 - Prompt R jest o rząd wielkości dłuższy (`REFERENCE.md`). Porównania kosztu podaje się w tokenach.
 - Opisy są po angielsku, a referencja Rdzenia po polsku. Tak samo jest przy normalnym użyciu skilla.
+- Warianty agentowe nie mają limitu tur. Ograniczają je czas (`--limit-s`, domyślnie 1800 s) i budżet
+  (`--budzet-usd`). Pośrednik blokuje też PyPI, więc agent nie doinstaluje pakietów; Z3 jest w obrazie.
+- Obrazów Dockera samotest nie buduje. Ścieżkę agentową sprawdza atrapą agenta (`--bez-kontenera`).
 
 ## Licencje
 

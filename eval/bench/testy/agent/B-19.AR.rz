@@ -1,0 +1,12 @@
+fn floor_average(xs: Array<Int>) -> Int
+    requires 1 <= xs.len && xs.len <= 1000
+    requires forall k in 0..xs.len: -1000000000000 <= xs[k] && xs[k] <= 1000000000000
+{
+    var s = 0
+    for x in xs
+        invariant -1000000000000 * it <= s && s <= 1000000000000 * it
+    {
+        s = s + x
+    }
+    s / xs.len
+}

@@ -7,7 +7,9 @@
    poza dziedzinę opisaną w zadaniu (--szybko: tylko kilka wzorców);
 3. kontrole negatywne oceniacza: błędny wynik, `requires` za silny, zły typ wyniku, wyjątek,
    przekroczenie limitu czasu, niezgodna sygnatura;
-4. pełna pętla `uruchom.py` z odpowiedziami odtwarzanymi z testy/odtworz oraz `raport.py`."""
+4. pełna pętla `uruchom.py` z odpowiedziami odtwarzanymi z testy/odtworz, --powtorzenia i `raport.py`;
+5. treść żądania Messages API z cache (bez sieci);
+6. `agent.py --bez-kontenera` z atrapą agenta (obrazów Dockera samotest nie buduje)."""
 from __future__ import annotations
 
 import concurrent.futures as cf
@@ -19,7 +21,7 @@ import sys
 import tempfile
 
 TU = os.path.dirname(os.path.abspath(__file__))
-sys.path[:0] = [os.path.join(TU, "..", ".."), os.path.join(TU, "..")]
+sys.path[:0] = [os.path.join(TU, "..", ".."), os.path.join(TU, ".."), TU]
 os.environ.setdefault("RZ_EVAL_LIMIT_TESTOW", "20")
 
 from bench import ocen  # noqa: E402
@@ -119,6 +121,76 @@ def petla():
               and z["P/A"]["pass1_verabench_A"] == 100.0, "raport.py: zestawienie")
     finally:
         shutil.rmtree(wyj, ignore_errors=True)
+    wyj = tempfile.mkdtemp(prefix="rz_eval_")
+    try:
+        cmd = [sys.executable, os.path.join(TU, "uruchom.py"), "--model", "odtworzony", "--backend", "odtworz",
+               "--odtworz", os.path.join(TU, "testy", "odtworz"), "--zadania", "A-T1-007", "--warianty", "R",
+               "--powtorzenia", "2", "--wyjscie", wyj]
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        p2 = subprocess.run([sys.executable, os.path.join(TU, "raport.py"), wyj, "--json"], capture_output=True,
+                            text=True, timeout=60)
+        d = json.loads(p2.stdout)
+        zgłoś(p.returncode == 0 and d["powtorzenia"] == 2 and d["zestawienie"]["R/A"]["pct_poprawne"] == 100.0
+              and d["zestawienie"]["R/A"]["pct_poprawne_sd"] == 0.0, "--powtorzenia 2: powt-1, powt-2, średnia ± sd")
+    finally:
+        shutil.rmtree(wyj, ignore_errors=True)
+
+
+def cache_api():
+    """Treść żądania Messages API (bez sieci): cache_control na prompcie systemowym i automatyczny punkt."""
+    import io
+    import types
+    import uruchom
+    zap = {}
+
+    class Odp(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            pass
+
+    def falszywe(req, timeout=0):
+        zap.update(json.loads(req.data))
+        return Odp(json.dumps({"content": [{"type": "text", "text": "x"}], "usage": {
+            "input_tokens": 1, "output_tokens": 1, "cache_read_input_tokens": 9}}).encode())
+
+    stare = uruchom.urllib.request.urlopen, os.environ.get("ANTHROPIC_API_KEY")
+    uruchom.urllib.request.urlopen = falszywe
+    os.environ["ANTHROPIC_API_KEY"] = "test"
+    try:
+        a = types.SimpleNamespace(backend="anthropic", model="m", max_tokens=8, bez_cache=False)
+        _, u = uruchom.Model(a)("A", "R", 1, "SYS", [{"role": "user", "content": "q"}])
+    finally:
+        uruchom.urllib.request.urlopen = stare[0]
+        if stare[1] is None:
+            del os.environ["ANTHROPIC_API_KEY"]
+        else:
+            os.environ["ANTHROPIC_API_KEY"] = stare[1]
+    zgłoś(zap["system"][0].get("cache_control") == {"type": "ephemeral"} and zap.get("cache_control")
+          and u.get("cache_read_input_tokens") == 9, "Messages API: cache_control w żądaniu, tokeny cache w wyniku")
+
+
+def agentowe():
+    """agent.py --bez-kontenera z atrapą agenta: pakiet bez eval/, ocena AP/AR, audyt, raport."""
+    wyj = tempfile.mkdtemp(prefix="rz_eval_")
+    try:
+        cmd = [sys.executable, os.path.join(TU, "agent.py"), "uruchom", "--model", "atrapa", "--bez-kontenera",
+               "--polecenie-agenta", f"{sys.executable} {os.path.join(TU, 'testy', 'atrapa_agenta.py')}",
+               "--zadania", "A-T1-007,B-19,A-T1-001", "--wyjscie", wyj]
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        rs = {(r["zadanie"], r["wariant"]): r for r in map(json.loads, open(os.path.join(wyj, "wyniki.jsonl")))}
+        zgłoś(p.returncode == 0 and rs[("A-T1-007", "AR")]["poprawne"] and rs[("A-T1-007", "AP")]["poprawne"]
+              and rs[("A-T1-007", "AR")]["proby"][0]["bramka"]["akceptacja"], "agent.py: AP i AR ocenione")
+        zgłoś(rs[("B-19", "AR")]["blad_niewykryty"] and rs[("B-19", "AP")]["blad_niewykryty"]
+              and rs[("B-19", "AR")]["audyt"] and not rs[("A-T1-007", "AR")]["audyt"],
+              "agent.py: błąd niewykryty i audyt próby sięgnięcia po repozytorium")
+        zgłoś(rs[("A-T1-001", "AP")].get("brak_odpowiedzi"), "agent.py: brak pliku rozwiązania")
+        pak = os.path.join(wyj, "_rdzen")
+        zgłoś(os.path.exists(os.path.join(pak, "rzc")) and not any(
+            "eval" in dp.split(os.sep) for dp, _, _ in os.walk(pak)), "pakiet ~/rdzen dla agenta: jest rzc, nie ma eval/")
+    finally:
+        shutil.rmtree(wyj, ignore_errors=True)
 
 
 if __name__ == "__main__":
@@ -126,6 +198,8 @@ if __name__ == "__main__":
     wyrocznie()
     negatywne()
     petla()
+    cache_api()
+    agentowe()
     wzorce(szybko)
     shutil.rmtree(TMP, ignore_errors=True)
     sys.exit(0 if ok else 1)

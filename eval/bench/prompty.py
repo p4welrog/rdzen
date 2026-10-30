@@ -63,6 +63,30 @@ def prompt(z, wariant: str) -> dict:
     raise ValueError(wariant)
 
 
+def prompt_agenta(z, wariant: str) -> str:
+    """Warianty agentowe: AP (Python, agent może uruchamiać i testować kod), AR (Rdzeń ze skillem)."""
+    if wariant == "AP":
+        return (_wspolne(z) + _py_typy(z) +
+                f"Write a Python function with this signature:\n\n    {z.sygnatura_python()}\n\n"
+                "Put the final code in /praca/rozwiazanie.py (the definitions above, if any, will be provided "
+                "when your code is evaluated, so do not include them). You can run and test your code. "
+                "Stop when you are confident the function is correct for every input allowed by the "
+                "description.")
+    if wariant == "AR":
+        dane = ""
+        if z.dane:
+            dane = ("The program must contain these type definitions exactly as written:\n\n```rdzen\n"
+                    + "\n".join(d.rdzen() for d in z.dane) + "\n```\n\n")
+        return (_wspolne(z) + dane +
+                "Use the rdzen-verified-code skill; the Rdzeń compiler is already installed in ~/rdzen. "
+                f"Write a Rdzeń program containing a function with this signature:\n\n    {z.sygnatura_rdzen()}\n\n"
+                "Parameter and result types must match (refinements, requires and ensures are up to you). A caller "
+                "may pass any input allowed by the description above, so requires must not exclude such inputs. "
+                "Put the final program in /praca/rozwiazanie.rz; it must pass `rzc check` with no errors. "
+                "Do not write the solution in Python.")
+    raise ValueError(wariant)
+
+
 def poprawka(wariant: str, tekst: str) -> str:
     if wariant == "PT":
         return ("Running your tests produced:\n\n" + tekst + "\n\nFix the function or the tests. "
