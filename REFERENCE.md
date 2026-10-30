@@ -245,3 +245,38 @@ znaleziony kontrprzykład (zminimalizowany) jest raportowany jako błąd rzeczyw
 - Kontrprzykład z parametrem funkcyjnym podaje funkcję jako tabelę wartości w użytych punktach:
   `f = {1 ↦ 1, …}` — typ parametru dopuszcza taką funkcję, więc kod lub typ jest za słaby.
 - Przy niepewności co do kodu wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.
+
+### 10. Większe dowody (struktury danych, wiele pętli)
+
+Wzorce ze studium `docs/studium-huffman.md`; pełny przykład: `~/rdzen/examples/huffman.rz`.
+
+- **Najpierw podział na funkcje.** Pętla, która modyfikuje kilka tablic i potrzebuje lematów,
+  powinna być osobną funkcją z kontraktem (`merge_step`, `reassign` w `huffman.rz`). Duże ciało
+  pętli daje duże zobowiązania, które solver rozstrzyga niestabilnie. Dziel od razu, nie po
+  pierwszych `unknown`.
+- **Predykat po prefiksie definiuj rekurencyjnie, gdy będziesz go rozszerzać lub przenosić:**
+  `spec fn segs(…, k: Nat) decreases k = if k == 0 { true } else { segs(…, k - 1) && seg(…, k - 1) }`.
+  Rozszerzenie o element `k` to rozwinięcie definicji; postać `forall i in 0..k: …` wymaga
+  instancjonowania kwantyfikatora i bywa nierozstrzygnięta. Do każdego takiego predykatu
+  zwykle potrzebne są trzy lematy: `_at` (wyciągnięcie i-tego faktu), `_prefix` (k → j ≤ k)
+  i `_frame` (patrz niżej).
+- **Lemat ramy przy `push`/zapisie.** Jeśli niezmiennik używa funkcji rekurencyjnej zależnej
+  od tablicy (`has_path(t, s, bits, …)`), to po `push(&bits, …)` solver nie wie, że fakt
+  nadal zachodzi. Zrób kopię widmową przed zmianą (`let before = bits`) i wywołaj lemat:
+  `requires P(a) && forall q in lo..hi: b[q] == a[q]  ensures P(b)`, dowodzony indukcyjnie po
+  strukturze. Kopia czytana tylko przez lematy i asercje nie trafia do kodu wynikowego.
+- **Tablica zapisywana w pętli nie może być argumentem funkcji rekurencyjnej w niezmienniku,
+  jeśli da się tego uniknąć.** Fakty o zawartości wyrażaj przez indeksy (`bits[p + q] == c[q]`),
+  a funkcję rekurencyjną stosuj do tablicy niezmienianej (np. `c`) i przenoś lematem przesunięcia.
+- **Asercje pośrednie** w gałęziach (`assert mem(f[lo], s)` przed `own[s] = lo`) skracają
+  zobowiązania. Jeśli wynik weryfikacji zmienia się między uruchomieniami, to sygnał, że
+  zobowiązanie jest na granicy limitu — dziel funkcję albo dodaj asercje, nie zwiększaj `--rlimit`.
+- **Nazwy z preludium są zajęte:** `contains`, `min`, `max`, `compare`, `filled`, `concat`, `slice`
+  (`E1004`). Funkcji `spec` nie można przypisać do `let` (`E6105`) — pisz ją wprost w formułach.
+- **Spójniki pod kwantyfikatorem:** `forall i in 0..n: A && B` obejmuje `A && B`; kolejny
+  `&& forall …` też trafia do ciała. Kilka niezależnych kwantyfikatorów ujmuj w nawiasy
+  albo rozbij na osobne `spec fn` (formater usuwa nawiasy tylko tam, gdzie są zbędne).
+- **Równość tablic w formułach jest ekstensjonalna:** `a.len == b.len && forall i in 0..a.len:
+  a[i] == b[i]` wystarcza do `a == b` — nie pisz własnego predykatu równości.
+- **Diagnostyka `unknown`:** `RZ_DUMP_UNKNOWN=katalog rzc check …` zapisuje zapytania SMT-LIB
+  nierozstrzygniętych zobowiązań z `reason_unknown` (zwykle „max. resource limit exceeded”).

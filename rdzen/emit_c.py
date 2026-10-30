@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 from contextlib import contextmanager
 from .ast import *
+from .ghost import runtime_names, erasable_let
 from .check import has_array, RT, subst_rt, INT
 from .emit_py import Unsupported, needs_stmts, _all_refs, _all_refs_top, _ref_span
 
@@ -161,6 +162,7 @@ class CEmitter:
         self.buf = []
         self.ind = 0
         self.fn = None
+        self.rt_names = None
         self.scopes = []
         self.loops = []
         self.olds = {}
@@ -998,6 +1000,9 @@ class CEmitter:
 
     def stmt(self, s):
         if isinstance(s, Let):
+            # kopia zmiennej używana wyłącznie w dowodzie (lematy, asercje) — wymazana
+            if self.fn is not None and erasable_let(s, self.rt_names):
+                return
             if isinstance(s.expr, (If, Match, BlockExpr)):
                 t = self.fresh()
                 self.w(f"{self.ct(s.expr.ty)} {t} = {{0}};")
@@ -1165,7 +1170,7 @@ class CEmitter:
             else:
                 self.names.add("v_" + pn)
                 self.bind(pn, False, pt, cexpr=f"v_{pn}")
-        uses_old = any(isinstance(n, Old) for n in walk([f.ensures, f.body]))
+        self.rt_names, uses_old = runtime_names(f, self.unproved, self.need)
         if uses_old:
             for (pn, pt, pinout) in sig.params:
                 if pinout:

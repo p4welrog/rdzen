@@ -1,0 +1,101 @@
+// expect: ok
+// Regresja: kongruencja argumentów funkcji rekurencyjnej pod kwantyfikatorem (bez próby UF: unknown).
+// Drzewo kodu: liście niosą symbole, węzeł wewnętrzny: 0 = lewo, 1 = prawo.
+data Tree { Leaf(sym: Int), Node(left: Tree, right: Tree) }
+
+data Step { Step(sym: Int, next: Int) }
+
+spec fn mem(t: Tree, s: Int) -> Bool
+    decreases t
+=
+    match t { Leaf(x) => x == s, Node(l, r) => mem(l, s) || mem(r, s) }
+
+spec fn is_node(t: Tree) -> Bool =
+    match t { Leaf(_) => false, Node(_, _) => true }
+
+// bity bits[pos..end) to ścieżka od korzenia t do liścia z symbolem s
+spec fn has_path(t: Tree, s: Int, bits: Array<Int>, pos: Int, end: Int) -> Bool
+    decreases t
+=
+    match t {
+        Leaf(x) => x == s && pos == end,
+        Node(l, r) => 0 <= pos &&
+            pos < end &&
+            end <= bits.len &&
+            ((bits[pos] == 0 && has_path(l, s, bits, pos + 1, end)) || (bits[pos] == 1 && has_path(r, s, bits, pos + 1, end))),
+    }
+
+// dekodowanie jednego symbolu od pozycji pos
+spec fn dec1(t: Tree, bits: Array<Int>, pos: Int) -> Option<Step>
+    decreases t
+=
+    match t {
+        Leaf(x) => Some(Step(x, pos)),
+        Node(l, r) => if 0 <= pos && pos < bits.len {
+            if bits[pos] == 0 {
+                dec1(l, bits, pos + 1)
+            } else if bits[pos] == 1 {
+                dec1(r, bits, pos + 1)
+            } else {
+                None
+            }
+        } else {
+            None
+        },
+    }
+
+lemma fn path_decodes(t: Tree, s: Int, bits: Array<Int>, pos: Int, end: Int)
+    requires has_path(t, s, bits, pos, end)
+    ensures dec1(t, bits, pos) == Some(Step(s, end))
+    decreases t
+{
+    match t {
+        Leaf(_) => { },
+        Node(l, r) => {
+            if bits[pos] == 0 {
+                path_decodes(l, s, bits, pos + 1, end)
+            } else {
+                path_decodes(r, s, bits, pos + 1, end)
+            }
+        },
+    }
+}
+
+lemma fn path_frame(t: Tree, s: Int, a: Array<Int>, b: Array<Int>, pos: Int, end: Int)
+    requires has_path(t, s, a, pos, end)
+    requires end <= b.len
+    requires forall k in pos..end: b[k] == a[k]
+    ensures has_path(t, s, b, pos, end)
+    decreases t
+{
+    match t {
+        Leaf(_) => { },
+        Node(l, r) => {
+            if a[pos] == 0 {
+                path_frame(l, s, a, b, pos + 1, end)
+            } else {
+                path_frame(r, s, a, b, pos + 1, end)
+            }
+        },
+    }
+}
+
+spec fn seg_ok(t: Tree, msg: Array<Int>, bits: Array<Int>, ends: Array<Int>, k: Int) -> Bool =
+    0 <= k &&
+    k <= msg.len &&
+    k + 1 <= ends.len &&
+    (forall i in 0..k + 1: 0 <= ends[i] && ends[i] <= bits.len) &&
+    forall i in 0..k: has_path(t, msg[i], bits, ends[i], ends[i + 1])
+
+lemma fn seg_frame(t: Tree, msg: Array<Int>, a: Array<Int>, b: Array<Int>, ends: Array<Int>, k: Nat)
+    requires seg_ok(t, msg, a, ends, k)
+    requires b.len >= a.len
+    requires forall q in 0..a.len: b[q] == a[q]
+    ensures seg_ok(t, msg, b, ends, k)
+    decreases k
+{
+    if k > 0 {
+        seg_frame(t, msg, a, b, ends, k - 1)
+        path_frame(t, msg[k - 1], a, b, ends[k - 1], ends[k])
+    }
+}

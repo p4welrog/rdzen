@@ -1,0 +1,832 @@
+// Kod Huffmana: budowa drzewa, tablica kodów, kodowanie, dekodowanie i twierdzenie, że
+// dekodowanie odwraca kodowanie (huffman_roundtrip). Studium przypadku: docs/studium-huffman.md.
+// Drzewo kodu: liście niosą symbole, węzeł wewnętrzny: 0 = lewo, 1 = prawo.
+data Tree { Leaf(sym: Int), Node(left: Tree, right: Tree) }
+
+data Step { Step(sym: Int, next: Int) }
+
+spec fn mem(t: Tree, s: Int) -> Bool
+    decreases t
+=
+    match t { Leaf(x) => x == s, Node(l, r) => mem(l, s) || mem(r, s) }
+
+spec fn is_node(t: Tree) -> Bool =
+    match t { Leaf(_) => false, Node(_, _) => true }
+
+// bity bits[pos..end) to ścieżka od korzenia t do liścia z symbolem s
+spec fn has_path(t: Tree, s: Int, bits: Array<Int>, pos: Int, end: Int) -> Bool
+    decreases t
+=
+    match t {
+        Leaf(x) => x == s && pos == end,
+        Node(l, r) => 0 <= pos &&
+            pos < end &&
+            end <= bits.len &&
+            ((bits[pos] == 0 && has_path(l, s, bits, pos + 1, end)) || (bits[pos] == 1 && has_path(r, s, bits, pos + 1, end))),
+    }
+
+// dekodowanie jednego symbolu od pozycji pos
+spec fn dec1(t: Tree, bits: Array<Int>, pos: Int) -> Option<Step>
+    decreases t
+=
+    match t {
+        Leaf(x) => Some(Step(x, pos)),
+        Node(l, r) => if 0 <= pos && pos < bits.len {
+            if bits[pos] == 0 {
+                dec1(l, bits, pos + 1)
+            } else if bits[pos] == 1 {
+                dec1(r, bits, pos + 1)
+            } else {
+                None
+            }
+        } else {
+            None
+        },
+    }
+
+lemma fn path_decodes(t: Tree, s: Int, bits: Array<Int>, pos: Int, end: Int)
+    requires has_path(t, s, bits, pos, end)
+    ensures dec1(t, bits, pos) == Some(Step(s, end))
+    decreases t
+{
+    match t {
+        Leaf(_) => { },
+        Node(l, r) => {
+            if bits[pos] == 0 {
+                path_decodes(l, s, bits, pos + 1, end)
+            } else {
+                path_decodes(r, s, bits, pos + 1, end)
+            }
+        },
+    }
+}
+
+// przesunięcie / zmiana tablicy: ścieżka zależy tylko od bitów w [pos, end)
+lemma fn path_shift(t: Tree, s: Int, a: Array<Int>, b: Array<Int>, pos: Int, end: Int, d: Int)
+    requires has_path(t, s, a, pos, end)
+    requires 0 <= pos + d && end + d <= b.len
+    requires forall k in pos..end: b[k + d] == a[k]
+    ensures has_path(t, s, b, pos + d, end + d)
+    decreases t
+{
+    match t {
+        Leaf(_) => { },
+        Node(l, r) => {
+            if a[pos] == 0 {
+                path_shift(l, s, a, b, pos + 1, end, d)
+            } else {
+                path_shift(r, s, a, b, pos + 1, end, d)
+            }
+        },
+    }
+}
+
+spec fn height(t: Tree) -> Nat
+    decreases t
+=
+    match t { Leaf(_) => 0, Node(l, r) => 1 + max(height(l), height(r)) }
+
+fn tree_has(t: Tree, s: Int) -> Bool
+    ensures result == mem(t, s)
+    decreases t
+{
+    match t {
+        Leaf(x) => x == s,
+        Node(l, r) => tree_has(l, s) || tree_has(r, s),
+    }
+}
+
+// wysokość obcięta do cap + 1 (bez ryzyka przepełnienia)
+fn height_upto(t: Tree, cap: Int) -> Int
+    requires 0 <= cap && cap <= 1000000000000
+    ensures (result <= cap && result == height(t)) || (result == cap + 1 && height(t) > cap)
+    decreases t
+{
+    match t {
+        Leaf(_) => 0,
+        Node(l, r) => {
+            let hl = height_upto(l, cap)
+            let hr = height_upto(r, cap)
+            let m = max(hl, hr)
+            if m >= cap {
+                cap + 1
+            } else {
+                m + 1
+            }
+        },
+    }
+}
+
+// dopisuje na końcu bits ścieżkę do symbolu s
+fn emit_path(t: Tree, s: Int, inout bits: Array<Int>)
+    requires mem(t, s)
+    requires bits.len + height(t) <= int_max
+    ensures bits.len >= old(bits).len && bits.len <= old(bits).len + height(t)
+    ensures forall i in 0..old(bits).len: bits[i] == old(bits)[i]
+    ensures has_path(t, s, bits, old(bits).len, bits.len)
+    decreases t
+{
+    match t {
+        Leaf(_) => { },
+        Node(l, r) => {
+            let p = bits.len
+            if tree_has(l, s) {
+                push(&bits, 0)
+                emit_path(l, s, &bits)
+            } else {
+                push(&bits, 1)
+                emit_path(r, s, &bits)
+            }
+        },
+    }
+}
+
+const hmax: Int = 1048576
+
+const mmax: Int = 1073741824
+
+// tablica kodów: codes[s] to ścieżka do symbolu s
+spec fn codes_ok(t: Tree, codes: Array<Array<Int>>, n: Int) -> Bool =
+    codes.len == n &&
+    forall s in 0..n: codes[s].len <= hmax && has_path(t, s, codes[s], 0, codes[s].len)
+
+fn make_codes(t: Tree, n: Int) -> Array<Array<Int>>
+    requires 0 <= n && n <= mmax
+    requires height(t) <= hmax
+    requires all_mem(t, n)
+    ensures codes_ok(t, result, n)
+{
+    var codes: Array<Array<Int>> = []
+    var s = 0
+    while s < n
+        invariant 0 <= s && s <= n && codes.len == s
+        invariant forall q in 0..s:
+            codes[q].len <= hmax && has_path(t, q, codes[q], 0, codes[q].len)
+        decreases n - s
+    {
+        var c: Array<Int> = []
+        all_mem_at(t, n, s)
+        emit_path(t, s, &c)
+        push(&codes, c)
+        s = s + 1
+    }
+    codes
+}
+
+lemma fn path_frame(t: Tree, s: Int, a: Array<Int>, b: Array<Int>, pos: Int, end: Int)
+    requires has_path(t, s, a, pos, end)
+    requires end <= b.len
+    requires forall k in pos..end: b[k] == a[k]
+    ensures has_path(t, s, b, pos, end)
+    decreases t
+{
+    match t {
+        Leaf(_) => { },
+        Node(l, r) => {
+            if a[pos] == 0 {
+                path_frame(l, s, a, b, pos + 1, end)
+            } else {
+                path_frame(r, s, a, b, pos + 1, end)
+            }
+        },
+    }
+}
+
+// segmenty bits[ends[i]..ends[i+1]) kodują msg[i] dla i < k
+spec fn ends_ok(msg: Array<Int>, bits: Array<Int>, ends: Array<Int>, k: Int) -> Bool =
+    0 <= k &&
+    k <= msg.len &&
+    k + 1 <= ends.len &&
+    forall i in 0..k + 1: 0 <= ends[i] && ends[i] <= bits.len
+
+// i-ty segment (wymaga i + 1 < ends.len, i < msg.len)
+spec fn seg(t: Tree, msg: Array<Int>, bits: Array<Int>, ends: Array<Int>, i: Int) -> Bool =
+    0 <= i && i < msg.len && i + 1 < ends.len && has_path(t, msg[i], bits, ends[i], ends[i + 1])
+
+// segmenty 0..k (definicja rekurencyjna — wygodna do indukcji)
+spec fn segs(t: Tree, msg: Array<Int>, bits: Array<Int>, ends: Array<Int>, k: Nat) -> Bool
+    decreases k
+=
+    if k == 0 { true } else { segs(t, msg, bits, ends, k - 1) && seg(t, msg, bits, ends, k - 1) }
+
+spec fn seg_ok(t: Tree, msg: Array<Int>, bits: Array<Int>, ends: Array<Int>, k: Int) -> Bool =
+    ends_ok(msg, bits, ends, k) && segs(t, msg, bits, ends, k)
+
+// rama: dopisanie bitów za ends[k] nie psuje wcześniejszych segmentów
+lemma fn seg_frame(t: Tree, msg: Array<Int>, a: Array<Int>, b: Array<Int>, ends: Array<Int>, k: Int)
+    requires seg_ok(t, msg, a, ends, k)
+    requires b.len >= a.len
+    requires forall q in 0..a.len: b[q] == a[q]
+    ensures seg_ok(t, msg, b, ends, k)
+    decreases k
+{
+    if k > 0 {
+        seg_frame(t, msg, a, b, ends, k - 1)
+        path_frame(t, msg[k - 1], a, b, ends[k - 1], ends[k - 1 + 1])
+    }
+}
+
+lemma fn ends_frame(
+    t: Tree,
+    msg: Array<Int>,
+    bits: Array<Int>,
+    e1: Array<Int>,
+    e2: Array<Int>,
+    k: Nat,
+)
+    requires segs(t, msg, bits, e1, k)
+    requires k + 1 <= e1.len && k + 1 <= e2.len
+    requires forall q in 0..k + 1: e2[q] == e1[q]
+    ensures segs(t, msg, bits, e2, k)
+    decreases k
+{
+    if k > 0 {
+        ends_frame(t, msg, bits, e1, e2, k - 1)
+    }
+}
+
+data Enc { Enc(bits: Array<Int>, ends: Array<Int>) }
+
+fn encode(t: Tree, codes: Array<Array<Int>>, n: Int, msg: Array<Int>) -> Enc
+    requires codes_ok(t, codes, n)
+    requires msg.len <= mmax
+    requires forall i in 0..msg.len: 0 <= msg[i] && msg[i] < n
+    ensures result.ends.len == msg.len + 1
+    ensures result.ends[0] == 0 && result.ends[msg.len] == result.bits.len
+    ensures result.bits.len <= msg.len * hmax
+    ensures seg_ok(t, msg, result.bits, result.ends, msg.len)
+{
+    var bits: Array<Int> = []
+    var ends: Array<Int> = [0]
+    var k = 0
+    while k < msg.len
+        invariant 0 <= k && k <= msg.len && ends.len == k + 1
+        invariant ends[0] == 0 && ends[k] == bits.len && bits.len <= k * hmax
+        invariant seg_ok(t, msg, bits, ends, k)
+        decreases msg.len - k
+    {
+        let c = codes[msg[k]]
+        let p = bits.len
+        let old_bits = bits
+        var j = 0
+        while j < c.len
+            invariant 0 <= j && j <= c.len && bits.len == p + j
+            invariant forall q in 0..p: bits[q] == old_bits[q]
+            invariant forall q in 0..j: bits[p + q] == c[q]
+            decreases c.len - j
+        {
+            push(&bits, c[j])
+            j = j + 1
+        }
+        seg_frame(t, msg, old_bits, bits, ends, k)
+        path_shift(t, msg[k], c, bits, 0, c.len, p)
+        let e = c.len + p
+        let old_ends = ends
+        push(&ends, e)
+        ends_frame(t, msg, bits, old_ends, ends, k)
+        k = k + 1
+    }
+    Enc(bits, ends)
+}
+
+// ---------- dekodowanie ----------
+
+fn dec_one(t: Tree, bits: Array<Int>, pos: Int) -> Option<Step>
+    ensures result == dec1(t, bits, pos)
+    decreases t
+{
+    match t {
+        Leaf(x) => Some(Step(x, pos)),
+        Node(l, r) => {
+            if 0 <= pos && pos < bits.len {
+                if bits[pos] == 0 {
+                    dec_one(l, bits, pos + 1)
+                } else if bits[pos] == 1 {
+                    dec_one(r, bits, pos + 1)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        },
+    }
+}
+
+spec fn adv_ok(t: Tree, bits: Array<Int>, pos: Int) -> Bool =
+    match dec1(t, bits, pos) {
+        Some(Step(_, e)) => pos <= e && e <= bits.len && (!is_node(t) || pos < e),
+        None => true,
+    }
+
+// każdy krok dekodowania w drzewie z korzeniem-węzłem zjada co najmniej jeden bit
+lemma fn dec1_adv(t: Tree, bits: Array<Int>, pos: Int)
+    requires 0 <= pos && pos <= bits.len
+    ensures adv_ok(t, bits, pos)
+    decreases t
+{
+    match t {
+        Leaf(_) => { },
+        Node(l, r) => {
+            if pos < bits.len {
+                dec1_adv(l, bits, pos + 1)
+                dec1_adv(r, bits, pos + 1)
+            }
+        },
+    }
+}
+
+spec fn step_ok(t: Tree, bits: Array<Int>, syms: Array<Int>, ends: Array<Int>, i: Int) -> Bool =
+    0 <= i &&
+    i < syms.len &&
+    i + 1 < ends.len &&
+    dec1(t, bits, ends[i]) == Some(Step(syms[i], ends[i + 1]))
+
+// łańcuch kroków dekodera zachłannego: kroki 0..k
+spec fn chain(t: Tree, bits: Array<Int>, syms: Array<Int>, ends: Array<Int>, k: Nat) -> Bool
+    decreases k
+=
+    if k == 0 {
+        true
+    } else {
+        chain(t, bits, syms, ends, k - 1) && step_ok(t, bits, syms, ends, k - 1)
+    }
+
+lemma fn chain_frame(
+    t: Tree,
+    bits: Array<Int>,
+    s1: Array<Int>,
+    e1: Array<Int>,
+    s2: Array<Int>,
+    e2: Array<Int>,
+    k: Nat,
+)
+    requires chain(t, bits, s1, e1, k)
+    requires k <= s1.len && k <= s2.len && k + 1 <= e1.len && k + 1 <= e2.len
+    requires forall q in 0..k: s2[q] == s1[q]
+    requires forall q in 0..k + 1: e2[q] == e1[q]
+    ensures chain(t, bits, s2, e2, k)
+    decreases k
+{
+    if k > 0 {
+        chain_frame(t, bits, s1, e1, s2, e2, k - 1)
+    }
+}
+
+data Dec { Dec(syms: Array<Int>, ends: Array<Int>, ok: Bool) }
+
+spec fn dec_ok(t: Tree, bits: Array<Int>, d: Dec) -> Bool =
+    d.ends.len == d.syms.len + 1 &&
+    d.ends[0] == 0 &&
+    chain(t, bits, d.syms, d.ends, d.syms.len) &&
+    ((d.ok && d.ends[d.syms.len] == bits.len) || (!d.ok && 0 <= d.ends[d.syms.len] && d.ends[d.syms.len] < bits.len && dec1(t, bits, d.ends[d.syms.len]) == None))
+
+fn decode(t: Tree, bits: Array<Int>) -> Dec
+    requires is_node(t)
+    requires bits.len < int_max
+    ensures dec_ok(t, bits, result)
+{
+    var syms: Array<Int> = []
+    var ends: Array<Int> = [0]
+    var pos = 0
+    var ok = true
+    while pos < bits.len
+        invariant 0 <= pos && pos <= bits.len && syms.len <= pos
+        invariant ends.len == syms.len + 1 && ends[0] == 0 && ends[syms.len] == pos
+        invariant chain(t, bits, syms, ends, syms.len)
+        invariant ok
+        decreases bits.len - pos
+    {
+        dec1_adv(t, bits, pos)
+        match dec_one(t, bits, pos) {
+            None => {
+                ok = false
+                break
+            },
+            Some(Step(s, e)) => {
+                let s0 = syms
+                let e0 = ends
+                let k = syms.len
+                push(&syms, s)
+                push(&ends, e)
+                chain_frame(t, bits, s0, e0, syms, ends, k)
+                pos = e
+            },
+        }
+    }
+    assert (ok && ends[syms.len] == bits.len) ||
+        (!ok && 0 <= ends[syms.len] && ends[syms.len] < bits.len && dec1(t, bits, ends[syms.len]) == None)
+    let d = Dec(syms, ends, ok)
+    d
+}
+
+// ---------- jednoznaczność dekodowania ----------
+
+spec fn same(a: Array<Int>, b: Array<Int>, k: Nat) -> Bool
+    decreases k
+=
+    if k == 0 {
+        true
+    } else {
+        k <= a.len && k <= b.len && same(a, b, k - 1) && a[k - 1] == b[k - 1]
+    }
+
+lemma fn same_all(a: Array<Int>, b: Array<Int>, k: Nat)
+    requires same(a, b, k)
+    ensures k <= a.len || k == 0
+    ensures forall i in 0..k: a[i] == b[i]
+    decreases k
+{
+    if k > 0 {
+        same_all(a, b, k - 1)
+    }
+}
+
+lemma fn segs_prefix(t: Tree, msg: Array<Int>, bits: Array<Int>, ends: Array<Int>, k: Nat, j: Nat)
+    requires segs(t, msg, bits, ends, k) && j <= k
+    ensures segs(t, msg, bits, ends, j)
+    decreases k
+{
+    if k > j {
+        segs_prefix(t, msg, bits, ends, k - 1, j)
+    }
+}
+
+lemma fn chain_prefix(t: Tree, bits: Array<Int>, syms: Array<Int>, ends: Array<Int>, k: Nat, j: Nat)
+    requires chain(t, bits, syms, ends, k) && j <= k
+    ensures chain(t, bits, syms, ends, j)
+    decreases k
+{
+    if k > j {
+        chain_prefix(t, bits, syms, ends, k - 1, j)
+    }
+}
+
+// zakodowany podział i łańcuch dekodera pokrywają się na pierwszych k segmentach
+lemma fn agree(
+    t: Tree,
+    bits: Array<Int>,
+    msg: Array<Int>,
+    ends: Array<Int>,
+    gs: Array<Int>,
+    ge: Array<Int>,
+    k: Nat,
+)
+    requires segs(t, msg, bits, ends, k) && chain(t, bits, gs, ge, k)
+    requires ends.len > k && ge.len > k && ends[0] == 0 && ge[0] == 0
+    ensures ge[k] == ends[k] && same(gs, msg, k)
+    decreases k
+{
+    if k > 0 {
+        agree(t, bits, msg, ends, gs, ge, k - 1)
+        path_decodes(t, msg[k - 1], bits, ends[k - 1], ends[k])
+    }
+}
+
+lemma fn decode_correct(t: Tree, bits: Array<Int>, msg: Array<Int>, ends: Array<Int>, d: Dec)
+    requires is_node(t)
+    requires seg_ok(t, msg, bits, ends, msg.len) && ends[0] == 0 && ends[msg.len] == bits.len
+    requires dec_ok(t, bits, d)
+    ensures d.ok && d.syms.len == msg.len && same(d.syms, msg, msg.len)
+{
+    let g = d.syms.len
+    let m = msg.len
+    if g < m {
+        segs_prefix(t, msg, bits, ends, m, g + 1)
+        segs_prefix(t, msg, bits, ends, m, g)
+        agree(t, bits, msg, ends, d.syms, d.ends, g)
+        path_decodes(t, msg[g], bits, ends[g], ends[g + 1])
+    } else if g > m {
+        chain_prefix(t, bits, d.syms, d.ends, g, m + 1)
+        chain_prefix(t, bits, d.syms, d.ends, g, m)
+        agree(t, bits, msg, ends, d.syms, d.ends, m)
+    } else {
+        agree(t, bits, msg, ends, d.syms, d.ends, m)
+    }
+}
+
+// ---------- budowa drzewa Huffmana ----------
+
+const nmax: Int = 1048576
+
+const wmax: Int = 1099511627776
+
+spec fn total(w: Array<Int>, k: Nat) -> Int
+    decreases k
+=
+    if k == 0 || k > w.len { 0 } else { total(w, k - 1) + w[k - 1] }
+
+lemma fn total_set(w: Array<Int>, v: Array<Int>, i: Int, k: Nat)
+    requires k <= w.len && w.len == v.len && 0 <= i && i < w.len
+    requires forall j in 0..w.len: j == i || v[j] == w[j]
+    ensures total(v, k) == total(w, k) + (if i < k { v[i] - w[i] } else { 0 })
+    decreases k
+{
+    if k > 0 {
+        total_set(w, v, i, k - 1)
+    }
+}
+
+lemma fn total_prefix(w: Array<Int>, v: Array<Int>, k: Nat)
+    requires k <= w.len && k <= v.len
+    requires forall j in 0..k: v[j] == w[j]
+    ensures total(v, k) == total(w, k)
+    decreases k
+{
+    if k > 0 {
+        total_prefix(w, v, k - 1)
+    }
+}
+
+lemma fn elem_le_total(w: Array<Int>, k: Nat, i: Int)
+    requires k <= w.len && 0 <= i && i < k
+    requires forall j in 0..k: w[j] >= 0
+    ensures w[i] <= total(w, k)
+    decreases k
+{
+    if k - 1 > i {
+        elem_le_total(w, k - 1, i)
+        nonneg_total(w, k - 1)
+    } else {
+        nonneg_total(w, k - 1)
+    }
+}
+
+lemma fn nonneg_total(w: Array<Int>, k: Nat)
+    requires k <= w.len
+    requires forall j in 0..k: w[j] >= 0
+    ensures total(w, k) >= 0
+    decreases k
+{
+    if k > 0 {
+        nonneg_total(w, k - 1)
+    }
+}
+
+data Pair { Pair(a: Int, b: Int) }
+
+// dwa różne indeksy o najmniejszych wagach (krok zachłanny Huffmana)
+fn two_min(w: Array<Int>) -> Pair
+    requires w.len >= 2
+    ensures 0 <= result.a && result.a < w.len && 0 <= result.b && result.b < w.len
+    ensures result.a != result.b
+    ensures forall i in 0..w.len: w[result.a] <= w[i]
+    ensures forall i in 0..w.len: i == result.a || w[result.b] <= w[i]
+{
+    var a = 0
+    var i = 1
+    while i < w.len
+        invariant 1 <= i && i <= w.len && 0 <= a && a < i
+        invariant forall j in 0..i: w[a] <= w[j]
+        decreases w.len - i
+    {
+        if w[i] < w[a] {
+            a = i
+        }
+        i = i + 1
+    }
+    var b = if a == 0 { 1 } else { 0 }
+    var j = 0
+    while j < w.len
+        invariant 0 <= j && j <= w.len && 0 <= b && b < w.len && b != a
+        invariant forall q in 0..j: q == a || w[b] <= w[q]
+        decreases w.len - j
+    {
+        if j != a && w[j] < w[b] {
+            b = j
+        }
+        j = j + 1
+    }
+    Pair(a, b)
+}
+
+lemma fn total_le(w: Array<Int>, k: Nat)
+    requires k <= w.len && k <= nmax
+    requires forall j in 0..k: w[j] <= wmax
+    ensures total(w, k) <= k * wmax
+    decreases k
+{
+    if k > 0 {
+        total_le(w, k - 1)
+    }
+}
+
+// own[s] wskazuje drzewo lasu zawierające symbol s
+spec fn own_ok(f: Array<Tree>, own: Array<Int>, s: Int) -> Bool =
+    0 <= s && s < own.len && 0 <= own[s] && own[s] < f.len && mem(f[own[s]], s)
+
+spec fn owned(f: Array<Tree>, own: Array<Int>, k: Nat) -> Bool
+    decreases k
+=
+    if k == 0 { true } else { owned(f, own, k - 1) && own_ok(f, own, k - 1) }
+
+lemma fn owned_at(f: Array<Tree>, own: Array<Int>, k: Nat, s: Int)
+    requires owned(f, own, k) && 0 <= s && s < k
+    ensures own_ok(f, own, s)
+    decreases k
+{
+    if s < k - 1 {
+        owned_at(f, own, k - 1, s)
+    }
+}
+
+lemma fn owned_frame(f1: Array<Tree>, o1: Array<Int>, f2: Array<Tree>, o2: Array<Int>, k: Nat)
+    requires owned(f1, o1, k) && k <= o2.len && f2.len >= f1.len
+    requires forall q in 0..k: o2[q] == o1[q]
+    requires forall j in 0..f1.len: f2[j] == f1[j]
+    ensures owned(f2, o2, k)
+    decreases k
+{
+    if k > 0 {
+        owned_frame(f1, o1, f2, o2, k - 1)
+        let s = k - 1
+        let o = o1[s]
+    }
+}
+
+spec fn heights_ok(f: Array<Tree>, h: Int) -> Bool =
+    forall i in 0..f.len: height(f[i]) <= h
+
+// przepięcie właścicieli po scaleniu f0[a], f0[b] w f[lo] i przeniesieniu f0[last] na f[hi]
+fn reassign(
+    f0: Array<Tree>,
+    f: Array<Tree>,
+    inout own: Array<Int>,
+    n: Nat,
+    a: Int,
+    b: Int,
+    lo: Int,
+    hi: Int,
+)
+    requires own.len == n && owned(f0, own, n)
+    requires 0 <= lo && lo < hi && hi < f0.len && f.len == f0.len - 1
+    requires (a == lo && b == hi) || (a == hi && b == lo)
+    requires f[lo] == Node(f0[a], f0[b])
+    requires hi == f.len || f[hi] == f0[f.len]
+    requires forall j in 0..f.len: j == lo || j == hi || f[j] == f0[j]
+    ensures own.len == n && owned(f, own, n)
+{
+    let last = f.len
+    let own0 = own
+    var s = 0
+    while s < n
+        invariant 0 <= s && s <= n && own.len == n
+        invariant owned(f, own, s)
+        invariant forall q in s..n: own[q] == own0[q]
+        decreases n - s
+    {
+        owned_at(f0, own0, n, s)
+        let o = own[s]
+        let pre = own
+        if o == a || o == b {
+            own[s] = lo
+        } else if o == last {
+            own[s] = hi
+        } else {
+        }
+        owned_frame(f, pre, f, own, s)
+        s = s + 1
+    }
+}
+
+spec fn pos_w(w: Array<Int>) -> Bool =
+    forall j in 0..w.len: 1 <= w[j]
+
+// jeden krok Huffmana: scal dwa drzewa o najmniejszych wagach
+fn merge_step(inout f: Array<Tree>, inout w: Array<Int>, inout own: Array<Int>, n: Nat)
+    requires 2 <= f.len && f.len <= n && n <= nmax && w.len == f.len
+    requires own.len == n && owned(f, own, n)
+    requires heights_ok(f, n - f.len)
+    requires pos_w(w)
+    requires total(w, w.len) <= nmax * wmax
+    ensures f.len == old(f).len - 1 && w.len == f.len
+    ensures own.len == n && owned(f, own, n)
+    ensures heights_ok(f, n - f.len)
+    ensures pos_w(w)
+    ensures total(w, w.len) == total(old(w), old(w).len)
+{
+    let len = f.len
+    let last = len - 1
+    let p = two_min(w)
+    let a = p.a
+    let b = p.b
+    elem_le_total(w, len, a)
+    elem_le_total(w, len, b)
+    let lo = min(a, b)
+    let hi = max(a, b)
+    let f0 = f
+    let w0 = w
+    let merged = Node(f0[a], f0[b])
+    let mw = w0[a] + w0[b]
+    f[lo] = merged
+    w[lo] = mw
+    let w1 = w
+    total_set(w0, w1, lo, len)
+    f[hi] = f[last]
+    w[hi] = w[last]
+    let w2 = w
+    total_set(w1, w2, hi, len)
+    let _ = pop(&f)
+    let _ = pop(&w)
+    total_prefix(w2, w, last)
+    reassign(f0, f, &own, n, a, b, lo, hi)
+}
+
+fn huffman_tree(freqs: Array<Int>) -> Tree
+    requires 1 <= freqs.len && freqs.len <= nmax
+    requires forall i in 0..freqs.len: 1 <= freqs[i] && freqs[i] <= wmax
+    ensures is_node(result)
+    ensures all_mem(result, freqs.len)
+    ensures height(result) <= freqs.len
+{
+    let n = freqs.len
+    if n == 1 {
+        return Node(Leaf(0), Leaf(0))
+    }
+    var f: Array<Tree> = []
+    var w: Array<Int> = []
+    var own: Array<Int> = []
+    var i = 0
+    while i < n
+        invariant 0 <= i && i <= n && f.len == i && w.len == i && own.len == i
+        invariant forall j in 0..i: own[j] == j && f[j] == Leaf(j) && w[j] == freqs[j]
+        invariant owned(f, own, i)
+        decreases n - i
+    {
+        let f0 = f
+        let o0 = own
+        push(&f, Leaf(i))
+        push(&w, freqs[i])
+        push(&own, i)
+        owned_frame(f0, o0, f, own, i)
+        i = i + 1
+    }
+    total_prefix(freqs, w, n)
+    total_le(freqs, n)
+    while f.len > 1
+        invariant 1 <= f.len && f.len <= n && w.len == f.len
+        invariant own.len == n && owned(f, own, n)
+        invariant heights_ok(f, n - f.len)
+        invariant pos_w(w)
+        invariant total(w, w.len) == total(freqs, n)
+        decreases f.len
+    {
+        merge_step(&f, &w, &own, n)
+    }
+    own_root(f, own, n, n)
+    f[0]
+}
+
+spec fn all_mem(t: Tree, k: Nat) -> Bool
+    decreases k
+=
+    if k == 0 { true } else { all_mem(t, k - 1) && mem(t, k - 1) }
+
+lemma fn own_root(f: Array<Tree>, own: Array<Int>, n: Nat, k: Nat)
+    requires owned(f, own, n) && f.len == 1 && k <= n
+    ensures all_mem(f[0], k)
+    decreases k
+{
+    if k > 0 {
+        own_root(f, own, n, k - 1)
+        let s = k - 1
+        owned_at(f, own, n, s)
+        let o = own[s]
+        let t = f[o]
+    }
+}
+
+lemma fn all_mem_at(t: Tree, k: Nat, s: Int)
+    requires all_mem(t, k) && 0 <= s && s < k
+    ensures mem(t, s)
+    decreases k
+{
+    if s < k - 1 {
+        all_mem_at(t, k - 1, s)
+    }
+}
+
+// ---------- twierdzenie końcowe: dekodowanie odwraca kodowanie ----------
+
+fn huffman_roundtrip(freqs: Array<Int>, msg: Array<Int>) -> Array<Int>
+    requires 1 <= freqs.len && freqs.len <= nmax
+    requires forall i in 0..freqs.len: 1 <= freqs[i] && freqs[i] <= wmax
+    requires msg.len <= mmax
+    requires forall i in 0..msg.len: 0 <= msg[i] && msg[i] < freqs.len
+    ensures result.len == msg.len
+    ensures forall i in 0..msg.len: result[i] == msg[i]
+    examples {
+        huffman_roundtrip([5, 9, 12, 13, 16, 45], [0, 5, 5, 1, 2, 3, 4, 0]) == [0, 5, 5, 1, 2, 3, 4, 0]
+        huffman_roundtrip([7], [0, 0, 0]) == [0, 0, 0]
+        huffman_roundtrip([1, 1], []) == []
+    }
+{
+    let n = freqs.len
+    let t = huffman_tree(freqs)
+    let codes = make_codes(t, n)
+    let e = encode(t, codes, n, msg)
+    let d = decode(t, e.bits)
+    decode_correct(t, e.bits, msg, e.ends, d)
+    same_all(d.syms, msg, msg.len)
+    d.syms
+}

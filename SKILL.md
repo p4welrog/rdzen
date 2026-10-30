@@ -33,25 +33,35 @@ prototyp ich nie obsługuje; wtedy napisz zwykły kod.
    (w tym test właściwości `forall`, jeśli to naturalne). Specyfikacja ma oddawać intencję
    użytkownika w całości — słaba specyfikacja (np. `None => true`) przepuszcza błędy.
    Przy niejasnej intencji pokaż użytkownikowi kontrakty, zanim napiszesz ciało.
-2. **Ciało z niezmiennikami.** Każda pętla: niezmiennik z granicami indeksów, faktami o każdej
+2. **Algorytm i złożoność.** Wybierz algorytm o złożoności, której użytkownik może oczekiwać
+   (np. Huffman: O(n log n) przez sortowanie i dwie kolejki, nie O(n²) przez liniowe szukanie
+   minimów). Jeśli dla prostoty dowodu wybierasz wolniejszy wariant, powiedz to użytkownikowi
+   przed pracą, nie w raporcie końcowym. Przy większym programie zaplanuj podział na funkcje
+   (sekcja 4.10).
+3. **Ciało z niezmiennikami.** Każda pętla: niezmiennik z granicami indeksów, faktami o każdej
    zapisywanej zmiennej (także `xs.len == old(xs).len` przy zapisie elementów) i `decreases`.
    W miejscach niepewnych wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.
-3. **Pętla kompilacji:** `python3 ~/rdzen/rzc fmt -w plik.rz`, potem
+4. **Pętla kompilacji:** `python3 ~/rdzen/rzc fmt -w plik.rz`, potem
    `python3 ~/rdzen/rzc check plik.rz --json`. Czytaj `code`,
    `obligation.formula`, `counterexample` (`class`: `real` = błąd w kodzie lub specyfikacji;
    `inductive` = za słaby niezmiennik albo `ensures` wywoływanej funkcji) i `notes`.
-   Poprawiaj i powtarzaj; do ok. 8 iteracji, potem opisz użytkownikowi, co nie przechodzi.
-4. **Nie osłabiaj `ensures` ani nie usuwaj przykładów, żeby przejść weryfikację**, chyba że
+   Poprawiaj i powtarzaj; do ok. 8 iteracji na funkcję, potem opisz użytkownikowi, co nie
+   przechodzi. Sprawdzaj funkcje przyrostowo (dopisuj i weryfikuj po jednej), bo pełne `check`
+   dużego pliku trwa dziesiątki sekund.
+5. **Nie osłabiaj `ensures` ani nie usuwaj przykładów, żeby przejść weryfikację**, chyba że
    specyfikacja była błędna — wtedy powiedz to użytkownikowi wprost.
-5. **Ostrzeżenia `W4200`/`W4400`** oznaczają sprawdzenie dynamiczne w kodzie wynikowym.
+6. **Ostrzeżenia `W4200`/`W4400`** oznaczają sprawdzenie dynamiczne w kodzie wynikowym.
    Spróbuj je usunąć (fakt w niezmienniku, ograniczenie w `requires`, `checked_*`); pozostałe
    wymień w raporcie.
-6. **Generowanie:** `python3 ~/rdzen/rzc emit plik.rz -o modul.py`, zaimportuj moduł i wywołaj
+7. **Generowanie:** `python3 ~/rdzen/rzc emit plik.rz -o modul.py`, zaimportuj moduł i wywołaj
    funkcję na przykładach. Pułapka czasu wykonania to wyjątek `RdzenTrap(kind, loc)`.
    Napisy przekazuj przez `modul.rz_str("…")`, wynik czytaj przez `modul.py_str(b)`.
    Gdy użytkownik potrzebuje C: `python3 ~/rdzen/rzc emit-c plik.rz -o modul.c` (GCC/Clang,
    `-std=gnu11`); funkcja `f` ma w C nazwę `fn_f`, `Int` to `int64_t`, tablica `A_Int_`
    (`.len`, `.d`), pułapka kończy program komunikatem (albo `longjmp`, gdy ustawiono `rz_jb`).
+   Wygenerowany kod C nie zwalnia pamięci, a tablice są wartościami: `let y = xs` czytane
+   w czasie wykonania to kopia O(n). Przy kodzie z pętlami zmierz czas na dużym wejściu
+   (np. 10⁶ elementów), zanim przekażesz wynik.
 
 ## 3. Wynik dla użytkownika
 
@@ -308,3 +318,38 @@ znaleziony kontrprzykład (zminimalizowany) jest raportowany jako błąd rzeczyw
 - Kontrprzykład z parametrem funkcyjnym podaje funkcję jako tabelę wartości w użytych punktach:
   `f = {1 ↦ 1, …}` — typ parametru dopuszcza taką funkcję, więc kod lub typ jest za słaby.
 - Przy niepewności co do kodu wstaw dziurę `?nazwa` i przeczytaj raport `H7001`.
+
+### 10. Większe dowody (struktury danych, wiele pętli)
+
+Wzorce ze studium `docs/studium-huffman.md`; pełny przykład: `~/rdzen/examples/huffman.rz`.
+
+- **Najpierw podział na funkcje.** Pętla, która modyfikuje kilka tablic i potrzebuje lematów,
+  powinna być osobną funkcją z kontraktem (`merge_step`, `reassign` w `huffman.rz`). Duże ciało
+  pętli daje duże zobowiązania, które solver rozstrzyga niestabilnie. Dziel od razu, nie po
+  pierwszych `unknown`.
+- **Predykat po prefiksie definiuj rekurencyjnie, gdy będziesz go rozszerzać lub przenosić:**
+  `spec fn segs(…, k: Nat) decreases k = if k == 0 { true } else { segs(…, k - 1) && seg(…, k - 1) }`.
+  Rozszerzenie o element `k` to rozwinięcie definicji; postać `forall i in 0..k: …` wymaga
+  instancjonowania kwantyfikatora i bywa nierozstrzygnięta. Do każdego takiego predykatu
+  zwykle potrzebne są trzy lematy: `_at` (wyciągnięcie i-tego faktu), `_prefix` (k → j ≤ k)
+  i `_frame` (patrz niżej).
+- **Lemat ramy przy `push`/zapisie.** Jeśli niezmiennik używa funkcji rekurencyjnej zależnej
+  od tablicy (`has_path(t, s, bits, …)`), to po `push(&bits, …)` solver nie wie, że fakt
+  nadal zachodzi. Zrób kopię widmową przed zmianą (`let before = bits`) i wywołaj lemat:
+  `requires P(a) && forall q in lo..hi: b[q] == a[q]  ensures P(b)`, dowodzony indukcyjnie po
+  strukturze. Kopia czytana tylko przez lematy i asercje nie trafia do kodu wynikowego.
+- **Tablica zapisywana w pętli nie może być argumentem funkcji rekurencyjnej w niezmienniku,
+  jeśli da się tego uniknąć.** Fakty o zawartości wyrażaj przez indeksy (`bits[p + q] == c[q]`),
+  a funkcję rekurencyjną stosuj do tablicy niezmienianej (np. `c`) i przenoś lematem przesunięcia.
+- **Asercje pośrednie** w gałęziach (`assert mem(f[lo], s)` przed `own[s] = lo`) skracają
+  zobowiązania. Jeśli wynik weryfikacji zmienia się między uruchomieniami, to sygnał, że
+  zobowiązanie jest na granicy limitu — dziel funkcję albo dodaj asercje, nie zwiększaj `--rlimit`.
+- **Nazwy z preludium są zajęte:** `contains`, `min`, `max`, `compare`, `filled`, `concat`, `slice`
+  (`E1004`). Funkcji `spec` nie można przypisać do `let` (`E6105`) — pisz ją wprost w formułach.
+- **Spójniki pod kwantyfikatorem:** `forall i in 0..n: A && B` obejmuje `A && B`; kolejny
+  `&& forall …` też trafia do ciała. Kilka niezależnych kwantyfikatorów ujmuj w nawiasy
+  albo rozbij na osobne `spec fn` (formater usuwa nawiasy tylko tam, gdzie są zbędne).
+- **Równość tablic w formułach jest ekstensjonalna:** `a.len == b.len && forall i in 0..a.len:
+  a[i] == b[i]` wystarcza do `a == b` — nie pisz własnego predykatu równości.
+- **Diagnostyka `unknown`:** `RZ_DUMP_UNKNOWN=katalog rzc check …` zapisuje zapytania SMT-LIB
+  nierozstrzygniętych zobowiązań z `reason_unknown` (zwykle „max. resource limit exceeded”).

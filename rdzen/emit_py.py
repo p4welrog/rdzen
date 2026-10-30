@@ -8,6 +8,7 @@ mutowalnej jako całości; parametry `inout` są zwracane w krotce i ponownie wi
 from __future__ import annotations
 import keyword
 from .ast import *
+from .ghost import runtime_names, erasable_let
 from .check import has_array, RT
 from .vcgen import writes_of
 
@@ -134,6 +135,7 @@ class Emitter:
         self.ind = 0
         self.tmp = 0
         self.fn = None
+        self.rt_names = None
         self.scopes = []
         self.loops = []
         self.user_inout = {f.name: [p for p in f.sig.params if p[2]] for f in checker.user_fns}
@@ -754,6 +756,9 @@ class Emitter:
 
     def stmt(self, s):
         if isinstance(s, Let):
+            # kopia zmiennej używana wyłącznie w dowodzie (lematy, asercje) — wymazana
+            if self.fn is not None and erasable_let(s, self.rt_names):
+                return
             if isinstance(s.expr, (If, Match, BlockExpr)):
                 py_tmp = self.fresh()
                 self.valued(s.expr, ("assign", py_tmp))
@@ -935,7 +940,7 @@ class Emitter:
         self.ind += 1
         doc = f"Rdzeń: {f.name} (wiersz {f.span.line})"
         self.w(repr(doc))
-        uses_old = any(isinstance(n, Old) for n in walk([f.ensures, f.body]))
+        self.rt_names, uses_old = runtime_names(f, self.unproved, self.need)
         if uses_old:
             for (pn, pt, pinout) in sig.params:
                 if pinout:

@@ -169,7 +169,7 @@ def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True) ->
             counts["proved"] += 1
             continue
         if fn not in fns:          # funkcja specyfikacyjna: brak sprawdzeń dynamicznych
-            counts["refuted"] += 1
+            counts["unknown" if worst.status == "unknown" else "refuted"] += 1
             res.diags.append(spec_diag(worst, ch, ver))
             continue
         if worst.status == "unknown":
@@ -179,7 +179,7 @@ def compile_source(src: str, run_examples=True, rlimit=1_000_000, canon=True) ->
                 res.diags.append(d)
                 continue
             if fns[fn].lemma:        # lematy są wymazywane — brak sprawdzeń dynamicznych
-                counts["refuted"] += 1
+                counts["unknown"] += 1   # błąd, ale nie obalenie: solver nie rozstrzygnął
                 res.diags.append(Diagnostic(CODE[worst.kind], "error", worst.span, MSG[worst.kind], SPEC[worst.kind],
                                             obligation=_obj(worst, "unknown"),
                                             notes=["solver nie rozstrzygnął zobowiązania w lemacie; lematy są wymazywane, "

@@ -67,6 +67,7 @@ class Ob:
     loop_info: Optional[dict] = None
     status: str = "pending"
     model: object = None
+    reason: Optional[str] = None
 
 
 @dataclass
@@ -170,6 +171,79 @@ def mark_tail_expr(e):
         mark_tail(e.block)
 
 
+def _recursive_decls(exprs):
+    """Symbole funkcji rekurencyjnych (RecFunction) występujące w wyrażeniach."""
+    found, seen, stack = {}, set(), list(exprs)
+    while stack:
+        e = stack.pop()
+        if e.get_id() in seen:
+            continue
+        seen.add(e.get_id())
+        if z3.is_quantifier(e):
+            stack.append(e.body())
+            continue
+        if z3.is_app(e):
+            d = e.decl()
+            if d.kind() == z3.Z3_OP_RECURSIVE:
+                found[d.name()] = d
+            stack.extend(e.children())
+    return list(found.values())
+
+
+def _uf_fallback(axioms, o, rlimit):
+    """Próba zapasowa (po `unknown`): funkcje rekurencyjne zastąpione nieinterpretowanymi (bez definicji).
+
+    Abstrakcja jest poprawna: jeśli hipotezy ∧ ¬φ są sprzeczne dla dowolnej interpretacji
+    symbolu, to także dla jego definicji. Rozstrzyga szybko zobowiązania, które wynikają
+    z kongruencji (f(.., a + b) ∧ a + b = c ⊢ f(.., c)); z definicjami rekurencyjnymi Z3
+    potrafi wyczerpać limit na rozwijaniu ciał, zanim scali argumenty (zob. tests/cases/cong_*.rz).
+    Wyłączenie: RZ_NO_UF=1."""
+    import os
+    if os.environ.get("RZ_NO_UF") == "1":
+        return False
+    exprs = list(axioms) + list(o.pc) + [o.phi]
+    decls = _recursive_decls(exprs)
+    if not decls:
+        return False
+    subs = []
+    for d in decls:
+        dom = [d.domain(i) for i in range(d.arity())]
+        g = z3.Function(d.name() + "!uf", *dom, d.range())
+        subs.append((d, g(*[z3.Var(i, srt) for i, srt in enumerate(dom)])))
+    s = z3.Solver()
+    s.set("rlimit", max(rlimit // 5, 1))
+    s.set("random_seed", 0)
+    for e in list(axioms) + list(o.pc):
+        s.add(z3.substitute_funs(e, *subs))
+    s.add(z3.Not(z3.substitute_funs(o.phi, *subs)))
+    return s.check() == z3.unsat
+
+
+def _dump_all(o, s):
+    """RZ_DUMP_ALL=katalog: zapis każdego zapytania SMT-LIB (np. do porównań między uruchomieniami)."""
+    import os
+    d = os.environ.get("RZ_DUMP_ALL")
+    if d:
+        os.makedirs(d, exist_ok=True)
+        tag = "".join(ch if ch.isalnum() else "_" for ch in f"{o.fn}_{o.kind}_{o.span.line}_{o.span.col}")
+        with open(os.path.join(d, tag + ".smt2"), "w") as fh:
+            fh.write(s.to_smt2())
+
+
+def _dump_unknown(o, s):
+    """RZ_DUMP_UNKNOWN=katalog: zapis zapytania SMT-LIB dla zobowiązań `unknown` (diagnostyka)."""
+    import os
+    d = os.environ.get("RZ_DUMP_UNKNOWN")
+    if not d:
+        return
+    os.makedirs(d, exist_ok=True)
+    tag = f"{o.fn}_{o.kind}_{o.span.line}_{o.span.col}"
+    name = "".join(ch if ch.isalnum() else "_" for ch in tag)
+    with open(os.path.join(d, name + ".smt2"), "w") as fh:
+        fh.write(f"; {tag}: {o.text}\n; reason_unknown: {s.reason_unknown()}\n")
+        fh.write(s.to_smt2())
+
+
 class Verifier:
     def __init__(self, checker, rlimit=1_000_000):
         self.ch = checker
@@ -183,6 +257,7 @@ class Verifier:
         Verifier._count = getattr(Verifier, "_count", 0) + 1
         self.uid = Verifier._count  # unikalne nazwy funkcji rekurencyjnych we wspólnym kontekście Z3
         self.str_names = set()     # nazwy zmiennych typu Str (czytelniejsze kontrprzykłady)
+        self.qnames = {}           # id(węzeł kwantyfikatora) -> numer (deterministyczne nazwy)
         self.recfuns = {}          # (spec, typy) -> RecFunction
         self.ranks = {}            # kształt typu danych -> funkcja rangi
         self.axioms = []           # (nazwa symbolu, aksjomat): rank(x) >= 1, kontrakty funkcji-wartości
@@ -273,7 +348,10 @@ class Verifier:
         if isinstance(e, Quant):
             lo, wl = self.tr(e.lo, env, fx)
             hi, wh = self.tr(e.hi, env, fx)
-            k = z3.Int(f"{e.var}!q{id(e) % 100000}")
+            # nazwa zmiennej związanej: numer kolejny węzła zamiast id(e) — id zależy od
+            # rozmieszczenia obiektów w pamięci (PYTHONHASHSEED), a nazwy wpływają na przebieg Z3
+            qn = self.qnames.setdefault(id(e), len(self.qnames))
+            k = z3.Int(f"{e.var}!q{qn}")
             env2 = dict(env)
             env2[e.var] = k
             b, wb = self.tr(e.body, env2, fx)
@@ -1406,14 +1484,16 @@ class Verifier:
         return self.obs
 
     def solve(self, o: Ob):
+        axs = self.axioms_for(o.exclude, list(o.pc) + [o.phi])
         s = z3.Solver()
         s.set("rlimit", self.rlimit)
         s.set("random_seed", 0)
-        for ax in self.axioms_for(o.exclude, list(o.pc) + [o.phi]):
+        for ax in axs:
             s.add(ax)
         for c in o.pc:
             s.add(c)
         s.add(z3.Not(o.phi))
+        _dump_all(o, s)
         res = s.check()
         if res == z3.unsat:
             o.status = "proved"
@@ -1423,8 +1503,12 @@ class Verifier:
             small = self.small_model(s, list(o.pc) + [z3.Not(o.phi)])
             if small is not None:
                 o.model = small
+        elif _uf_fallback(axs, o, self.rlimit):
+            o.status = "proved"
         else:
             o.status = "unknown"
+            o.reason = s.reason_unknown()
+            _dump_unknown(o, s)
             self.solve_ground(o)
 
     def solve_ground(self, o):

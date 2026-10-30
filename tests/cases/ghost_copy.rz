@@ -1,0 +1,36 @@
+// expect: ok
+// Kopie stanu używane tylko przez lematy i asercje: generatory nie mogą ich emitować
+// (sprawdza tests/ghost_test.py).
+spec fn all_pos(xs: Array<Int>, k: Nat) -> Bool
+    decreases k
+=
+    if k == 0 { true } else { k <= xs.len && all_pos(xs, k - 1) && xs[k - 1] > 0 }
+
+lemma fn all_pos_frame(a: Array<Int>, b: Array<Int>, k: Nat)
+    requires all_pos(a, k) && k <= b.len
+    requires forall q in 0..k: b[q] == a[q]
+    ensures all_pos(b, k)
+    decreases k
+{
+    if k > 0 {
+        all_pos_frame(a, b, k - 1)
+    }
+}
+
+fn fill(n: Nat, inout out: Array<Int>)
+    requires n <= 1000000 && out.len == 0
+    ensures out.len == n && all_pos(out, n)
+    ensures old(out).len == 0
+{
+    var i = 0
+    while i < n
+        invariant 0 <= i && i <= n && out.len == i && all_pos(out, i)
+        decreases n - i
+    {
+        let snapshot = out
+        push(&out, i + 1)
+        all_pos_frame(snapshot, out, i)
+        assert all_pos(out, i + 1)
+        i = i + 1
+    }
+}
