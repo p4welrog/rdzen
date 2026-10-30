@@ -103,6 +103,8 @@ Poza mechanizacją pozostają: funkcje wyższego rzędu, typy danych, tablice, `
    - odsetek zobowiązań udowodnionych w porównaniu ze sprawdzanymi dynamicznie.
 
    Dodatkowo mutacje kontraktów na próbce rozwiązań.
+
+   Punkt odniesienia: VeraBench (aallan/vera-bench, MIT). 60 zadań w JSON (opis neutralny, sygnatura, kontrakty, testy), wyniki pass@1 dla Very, Pythona i TypeScriptu. Według autorów jest nasycony (średnie 96,7–99,7%). Wniosek: część zadań można przenieść do Rdzenia jako wariant porównywalny z opublikowanymi wynikami, ale potrzebne są też zadania trudniejsze. Główną miarą zostają błędy niewykryte, czyli rozwiązania przechodzące kompilację i własne testy, a odrzucane przez testy ukryte. Porównanie projektowe z Verą: README, sekcja „Prace pokrewne”.
 2. **K1: zwalnianie pamięci w C.** Najpierw arena na wywołanie funkcji eksportowanej, później ewentualnie zliczanie referencji.
 3. **K8: węższe typy elementów w C.** `Int` z udowodnionym zakresem zapisywany jako `int32_t` albo `uint8_t`.
 4. **K9: zweryfikowana kolejka i kopiec w bibliotece standardowej.** Huffman w O(n log n).

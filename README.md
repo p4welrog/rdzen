@@ -111,6 +111,33 @@ i przekształcenia R (tw. 8.6), terminacja pętli (tw. 8.7), konieczność prawa
 - Wyrażenie `==` jest niedostępne dla typów danych zawierających tablice (`E2030`).
 - Cel dziury jest wyznaczany tylko dla dziur w pozycji wyniku funkcji.
 
+## Prace pokrewne: Vera
+
+[Vera](https://github.com/aallan/vera) (A. Allan, MIT, 2026) jest najbliższym znanym projektem
+o tej samej tezie: mały język pisany przez modele językowe, z obowiązkowymi kontraktami
+dowodzonymi przez Z3, sprawdzeniami dynamicznymi dla zobowiązań nierozstrzygniętych, formą
+kanoniczną i diagnostyką strukturalną (JSON). Różnice projektowe:
+
+| | Rdzeń | Vera |
+|---|---|---|
+| Paradygmat | rdzeń imperatywny (`inout`, `var`, `while` z niezmiennikami i wariantem) | czysto funkcyjny, iteracja przez rekurencję, efekty typowane (IO, HTTP, SQL, inferencja) |
+| Odwołania do zmiennych | nazwy | indeksy `@T.n` (typowane indeksy de Bruijna), bez nazw |
+| Sprawdzenia dowiedzionych zobowiązań | usuwane z kodu wynikowego | zachowywane (błędny dowód kończy się pułapką) |
+| Gwarancja usuwania sprawdzeń | dowód w Lean 4 dla fragmentu jądra (tw. 8.6) | brak mechanizacji; `vera test --distrust` testuje funkcje uznane za dowiedzione |
+| Niezmienniki typów danych | `data … where φ` | w specyfikacji, niezaimplementowane (zastępują je typy uściślone) |
+| Funkcje wyższego rzędu | typy zależne `fn(x: A) -> R where ψ` | domknięcia, bez uściśleń zależnych |
+| Backendy | Python, C | WebAssembly (CLI, przeglądarka, WASI 0.2) |
+
+Benchmark [VeraBench](https://github.com/aallan/vera-bench) (MIT) zawiera 60 zadań
+w 5 poziomach trudności. Każde zadanie ma opis w języku naturalnym, sygnaturę z kontraktami
+i przypadki testowe w JSON. Mierzy pass@1 dla Very, Pythona i TypeScriptu w dwóch trybach:
+z gotową specyfikacją i ze specyfikacją pisaną przez model. Dla Very v0.1.8 (9 modeli,
+jeden przebieg) średnie wynoszą: Vera 98,7%, Python 96,7%, TypeScript 99,7%. Autorzy
+zaznaczają, że benchmark jest nasycony: różnice mają szerokość 1–2 zadań. Benchmark nie mierzy
+błędów niewykrytych przez kompilator ani udziału zobowiązań udowodnionych statycznie, a te
+miary planowana ewaluacja Rdzenia stawia na pierwszym miejscu (`docs/stan-projektu.md`,
+zadanie 1).
+
 ## Licencje
 
 | Część | Licencja |
